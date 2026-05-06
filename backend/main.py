@@ -14,11 +14,11 @@ app = FastAPI(
 )
 
 # CORS — allow frontend origin
-FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://data-entry-software.vercel.app/")
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://data-entry-software.vercel.app")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL, "https://data-entry-software.vercel.app/", "http://127.0.0.1:5500"],
+    allow_origins=[FRONTEND_URL, "https://data-entry-software.vercel.app", "http://127.0.0.1:5500"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
