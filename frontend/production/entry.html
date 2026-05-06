@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Production Entry — MAHLE</title>
+  <link rel="stylesheet" href="../assets/css/main.css"/>
+  <style>
+    .app-layout { display: flex; min-height: 100vh; }
+    .main-content { margin-left: var(--sidebar-width); flex: 1; display: flex; flex-direction: column; }
+
+    .entry-card {
+      max-width: 820px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .step-bar {
+      display: flex; align-items: center;
+      margin-bottom: 28px;
+      gap: 0;
+    }
+    .step {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 0.8rem; font-weight: 600;
+      color: var(--text-muted);
+    }
+    .step-num {
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      background: var(--border);
+      color: var(--text-muted);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.75rem; font-weight: 700;
+      flex-shrink: 0;
+      transition: all var(--transition);
+    }
+    .step.active .step-num { background: var(--mahle-blue-light); color: white; }
+    .step.active { color: var(--mahle-blue); }
+    .step.done .step-num { background: var(--green); color: white; }
+    .step.done { color: var(--green); }
+    .step-line {
+      flex: 1; height: 2px;
+      background: var(--border);
+      margin: 0 8px;
+      transition: background var(--transition);
+    }
+    .step-line.done { background: var(--green); }
+
+    .section-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+
+    .section-panel-header {
+      background: var(--mahle-blue);
+      padding: 14px 20px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .section-panel-title {
+      font-family: var(--font-condensed);
+      font-weight: 700; font-size: 0.95rem;
+      color: white; letter-spacing: 0.04em;
+    }
+    .section-panel-num {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: var(--mahle-orange);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.7rem; font-weight: 700;
+      color: white; flex-shrink: 0;
+    }
+
+    .section-panel-body { padding: 20px; }
+
+    .status-indicator {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      font-weight: 600; font-size: 0.9rem;
+      margin-bottom: 16px;
+    }
+    .status-above { background: var(--green-bg); color: var(--green); border: 1px solid #6ee7b7; }
+    .status-below { background: var(--red-bg); color: var(--red); border: 1px solid #fca5a5; }
+
+    .downtime-list { display: flex; flex-direction: column; gap: 10px; }
+    .downtime-row {
+      display: grid; grid-template-columns: 1fr 120px auto;
+      gap: 10px; align-items: center;
+      background: var(--bg);
+      padding: 10px 14px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+    }
+
+    .btn-add-row {
+      border: 2px dashed var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      width: 100%;
+      padding: 10px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-size: 0.85rem; font-weight: 600;
+      transition: all var(--transition);
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .btn-add-row:hover { border-color: var(--mahle-blue-light); color: var(--mahle-blue-light); background: rgba(0,119,204,0.04); }
+
+    .form-actions {
+      display: flex; align-items: center; justify-content: flex-end;
+      gap: 10px; margin-top: 20px;
+    }
+
+    .calc-preview {
+      background: linear-gradient(135deg, var(--mahle-blue) 0%, var(--mahle-blue-mid) 100%);
+      border-radius: var(--radius-lg);
+      padding: 16px 20px;
+      color: white;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .calc-item { text-align: center; }
+    .calc-val {
+      font-family: var(--font-condensed);
+      font-size: 1.5rem; font-weight: 700;
+    }
+    .calc-label {
+      font-size: 0.7rem; color: rgba(255,255,255,0.6);
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-title">Production Data Entry</div>
+      <div class="topbar-actions">
+        <a href="/production/history.html" class="btn btn-ghost btn-sm">View History</a>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <div class="entry-card">
+        <!-- Step bar -->
+        <div class="step-bar">
+          <div class="step active" id="step1"><div class="step-num">1</div><span>Line & Model</span></div>
+          <div class="step-line" id="line12"></div>
+          <div class="step" id="step2"><div class="step-num">2</div><span>Date & Shift</span></div>
+          <div class="step-line" id="line23"></div>
+          <div class="step" id="step3"><div class="step-num">3</div><span>Output & Manpower</span></div>
+          <div class="step-line" id="line34"></div>
+          <div class="step" id="step4"><div class="step-num">4</div><span>Downtime</span></div>
+        </div>
+
+        <!-- SECTION 1: Line + Model + Date + Shift -->
+        <div class="section-panel">
+          <div class="section-panel-header">
+            <div class="section-panel-num">1</div>
+            <div class="section-panel-title">Line, Model & Session</div>
+          </div>
+          <div class="section-panel-body">
+            <div class="form-row form-row-2">
+              <div class="form-group">
+                <label class="form-label">Production Line *</label>
+                <select class="form-control" id="lineSelect" onchange="onLineChange()">
+                  <option value="">— Select Line —</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Model *</label>
+                <select class="form-control" id="modelSelect" onchange="onModelChange()" disabled>
+                  <option value="">— Select Model —</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Date *</label>
+                <input type="date" class="form-control" id="entryDate"/>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Shift / Hour *</label>
+                <select class="form-control" id="shiftSelect">
+                  <option value="">— Select Shift —</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Product (Model SKU)</label>
+              <select class="form-control" id="productSelect" disabled>
+                <option value="">— Select after Model —</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION 2: Hours + Manpower -->
+        <div class="section-panel">
+          <div class="section-panel-header">
+            <div class="section-panel-num">2</div>
+            <div class="section-panel-title">Manpower & Hours</div>
+          </div>
+          <div class="section-panel-body">
+            <div class="form-row form-row-2">
+              <div class="form-group">
+                <label class="form-label">Hours Worked *</label>
+                <input type="number" class="form-control" id="hoursWorked" value="8" min="0.5" max="24" step="0.5" oninput="recalc()"/>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Manpower (persons) *</label>
+                <input type="number" class="form-control" id="manpower" min="1" placeholder="e.g. 10" oninput="recalc()"/>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION 3: Target + Output -->
+        <div class="section-panel">
+          <div class="section-panel-header">
+            <div class="section-panel-num">3</div>
+            <div class="section-panel-title">Production Target & Output</div>
+          </div>
+          <div class="section-panel-body">
+            <div class="form-row form-row-2">
+              <div class="form-group">
+                <label class="form-label">Target (units) *</label>
+                <input type="number" class="form-control" id="target" min="0" placeholder="Enter target" oninput="recalc()"/>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Actual Output (units) *</label>
+                <input type="number" class="form-control" id="output" min="0" placeholder="Enter output" oninput="recalc()"/>
+              </div>
+            </div>
+
+            <!-- Live calc preview -->
+            <div class="calc-preview" id="calcPreview" style="display:none">
+              <div class="calc-item">
+                <div class="calc-val" id="calcEff">—</div>
+                <div class="calc-label">Efficiency %</div>
+              </div>
+              <div class="calc-item">
+                <div class="calc-val" id="calcUPMD">—</div>
+                <div class="calc-label">Units / Man-Day</div>
+              </div>
+              <div class="calc-item">
+                <div class="calc-val" id="calcGap">—</div>
+                <div class="calc-label">Gap (units)</div>
+              </div>
+            </div>
+
+            <!-- Status -->
+            <div id="statusIndicator" style="display:none"></div>
+          </div>
+        </div>
+
+        <!-- SECTION 4: Downtime (shown only if output < target) -->
+        <div class="section-panel" id="downtimeSection" style="display:none">
+          <div class="section-panel-header">
+            <div class="section-panel-num">4</div>
+            <div class="section-panel-title">Downtime Entry — Required (Output &lt; Target)</div>
+          </div>
+          <div class="section-panel-body">
+            <div class="downtime-list" id="downtimeList"></div>
+            <button class="btn-add-row" style="margin-top:10px" onclick="addDowntimeRow()">
+              + Add Downtime Reason
+            </button>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="form-actions">
+          <button class="btn btn-ghost" onclick="resetForm()">Clear</button>
+          <button class="btn btn-orange btn-lg" id="submitBtn" onclick="submitEntry()">
+            Save Production Entry →
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/config.js"></script>
+<script src="../assets/js/layout.js"></script>
+<script>
+  Auth.requireAuth(['admin','operator']);
+  buildLayout('entry');
+
+  let reasons = [];
+
+  // Set today's date
+  document.getElementById('entryDate').value = new Date().toISOString().split('T')[0];
+
+  async function init() {
+    const [lines, shifts, reasonsData] = await Promise.all([
+      API.get('/api/master/lines'),
+      API.get('/api/master/shifts'),
+      API.get('/api/master/reasons'),
+    ]);
+    reasons = reasonsData;
+
+    lines.forEach(l => {
+      document.getElementById('lineSelect').add(new Option(l.name, l.id));
+    });
+    shifts.forEach(s => {
+      document.getElementById('shiftSelect').add(new Option(`${s.name} (${s.start_time}–${s.end_time})`, s.id));
+    });
+  }
+
+  async function onLineChange() {
+    const lineId = document.getElementById('lineSelect').value;
+    const modelSel = document.getElementById('modelSelect');
+    const productSel = document.getElementById('productSelect');
+
+    modelSel.innerHTML = '<option value="">— Select Model —</option>';
+    productSel.innerHTML = '<option value="">— Select after Model —</option>';
+    modelSel.disabled = !lineId;
+    productSel.disabled = true;
+
+    if (!lineId) return;
+    const models = await API.get(`/api/master/models?line_id=${lineId}`);
+    models.forEach(m => modelSel.add(new Option(m.name, m.id)));
+    modelSel.disabled = false;
+  }
+
+  async function onModelChange() {
+    const modelId = document.getElementById('modelSelect').value;
+    const productSel = document.getElementById('productSelect');
+    productSel.innerHTML = '<option value="">— Select Product —</option>';
+    productSel.disabled = !modelId;
+
+    if (!modelId) return;
+    const products = await API.get(`/api/master/products?model_id=${modelId}`);
+    products.forEach(p => productSel.add(new Option(`${p.product_id} — ${p.description}`, p.id)));
+    productSel.disabled = false;
+  }
+
+  function recalc() {
+    const target = parseInt(document.getElementById('target').value) || 0;
+    const output = parseInt(document.getElementById('output').value) || 0;
+    const manpower = parseInt(document.getElementById('manpower').value) || 0;
+    const hours = parseFloat(document.getElementById('hoursWorked').value) || 8;
+
+    if (!target && !output) {
+      document.getElementById('calcPreview').style.display = 'none';
+      document.getElementById('statusIndicator').style.display = 'none';
+      document.getElementById('downtimeSection').style.display = 'none';
+      return;
+    }
+
+    const eff = target ? ((output / target) * 100).toFixed(1) : 0;
+    const upmd = manpower ? (output / manpower / (hours / 8)).toFixed(1) : '—';
+    const gap = target - output;
+
+    document.getElementById('calcEff').textContent = eff + '%';
+    document.getElementById('calcUPMD').textContent = upmd;
+    document.getElementById('calcGap').textContent = gap > 0 ? '-' + gap : gap === 0 ? '0' : '+' + Math.abs(gap);
+    document.getElementById('calcPreview').style.display = 'grid';
+
+    if (output >= target) {
+      document.getElementById('statusIndicator').innerHTML = `<div class="status-indicator status-above">✓ Output meets or exceeds target — No downtime required</div>`;
+      document.getElementById('downtimeSection').style.display = 'none';
+    } else {
+      document.getElementById('statusIndicator').innerHTML = `<div class="status-indicator status-below">⚠ Output below target by ${gap} units — Downtime entry required</div>`;
+      document.getElementById('downtimeSection').style.display = 'block';
+      if (!document.getElementById('downtimeList').children.length) addDowntimeRow();
+    }
+    document.getElementById('statusIndicator').style.display = 'block';
+  }
+
+  function addDowntimeRow() {
+    const list = document.getElementById('downtimeList');
+    const idx = list.children.length;
+    const row = document.createElement('div');
+    row.className = 'downtime-row';
+    row.innerHTML = `
+      <select class="form-control" name="reason_id[]">
+        <option value="">— Select Reason —</option>
+        ${reasons.map(r => `<option value="${r.id}">${r.reason}</option>`).join('')}
+      </select>
+      <div style="display:flex;align-items:center;gap:6px">
+        <input type="number" class="form-control" name="duration[]" placeholder="Min" min="1" style="width:80px"/>
+        <span style="font-size:0.75rem;color:var(--text-muted)">min</span>
+      </div>
+      <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">✕</button>`;
+    list.appendChild(row);
+  }
+
+  function resetForm() {
+    document.getElementById('lineSelect').value = '';
+    document.getElementById('modelSelect').innerHTML = '<option value="">— Select Model —</option>';
+    document.getElementById('modelSelect').disabled = true;
+    document.getElementById('productSelect').innerHTML = '<option value="">— Select after Model —</option>';
+    document.getElementById('productSelect').disabled = true;
+    document.getElementById('target').value = '';
+    document.getElementById('output').value = '';
+    document.getElementById('manpower').value = '';
+    document.getElementById('hoursWorked').value = '8';
+    document.getElementById('calcPreview').style.display = 'none';
+    document.getElementById('statusIndicator').style.display = 'none';
+    document.getElementById('downtimeSection').style.display = 'none';
+    document.getElementById('downtimeList').innerHTML = '';
+  }
+
+  async function submitEntry() {
+    const lineId   = document.getElementById('lineSelect').value;
+    const modelId  = document.getElementById('modelSelect').value;
+    const productId= document.getElementById('productSelect').value;
+    const shiftId  = document.getElementById('shiftSelect').value;
+    const date     = document.getElementById('entryDate').value;
+    const target   = parseInt(document.getElementById('target').value);
+    const output   = parseInt(document.getElementById('output').value);
+    const manpower = parseInt(document.getElementById('manpower').value);
+    const hours    = parseFloat(document.getElementById('hoursWorked').value);
+
+    if (!lineId || !modelId || !shiftId || !date || isNaN(target) || isNaN(output) || isNaN(manpower)) {
+      showToast('Please fill all required fields', 'error'); return;
+    }
+
+    // Collect downtime if below target
+    const downtimeRows = [];
+    if (output < target) {
+      const rows = document.querySelectorAll('.downtime-row');
+      for (const row of rows) {
+        const reasonId = row.querySelector('[name="reason_id[]"]').value;
+        const duration = parseInt(row.querySelector('[name="duration[]"]').value);
+        if (!reasonId || !duration) { showToast('Fill all downtime reason fields', 'error'); return; }
+        downtimeRows.push({ reason_id: reasonId, duration_minutes: duration });
+      }
+      if (!downtimeRows.length) { showToast('Add at least one downtime reason', 'error'); return; }
+    }
+
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Saving...';
+
+    try {
+      await API.post('/api/production/entries', {
+        line_id: lineId, model_id: modelId, product_id: productId || null,
+        shift_id: shiftId, date, target, output, manpower,
+        hours_worked: hours, downtime: downtimeRows
+      });
+      showToast('Production entry saved successfully!', 'success');
+      setTimeout(() => window.location.href = '/production/history.html', 1200);
+    } catch (e) {
+      showToast(e.message || 'Failed to save entry', 'error');
+      btn.disabled = false; btn.innerHTML = 'Save Production Entry →';
+    }
+  }
+
+  init();
+</script>
+</body>
+</html>

@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MAHLE — Sign In</title>
+  <link rel="stylesheet" href="assets/css/main.css"/>
+  <style>
+    body {
+      background: var(--mahle-blue);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Animated background grid */
+    .bg-grid {
+      position: fixed; inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+      background-size: 48px 48px;
+      pointer-events: none;
+    }
+
+    .bg-glow {
+      position: fixed;
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(232,119,34,0.15) 0%, transparent 70%);
+      bottom: -200px; right: -100px;
+      pointer-events: none;
+    }
+
+    .bg-glow-2 {
+      position: fixed;
+      width: 400px; height: 400px;
+      background: radial-gradient(circle, rgba(0,119,204,0.2) 0%, transparent 70%);
+      top: -100px; left: -100px;
+      pointer-events: none;
+    }
+
+    /* Login wrapper */
+    .login-wrapper {
+      display: flex;
+      width: 900px;
+      max-width: 95vw;
+      min-height: 560px;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.4);
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Left panel */
+    .login-panel-left {
+      flex: 1;
+      background: linear-gradient(145deg, #002C4E 0%, #003E6B 50%, #005A9E 100%);
+      padding: 48px 44px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .login-panel-left::before {
+      content: '';
+      position: absolute;
+      bottom: -60px; right: -60px;
+      width: 280px; height: 280px;
+      border: 40px solid rgba(232,119,34,0.1);
+      border-radius: 50%;
+    }
+
+    .login-panel-left::after {
+      content: '';
+      position: absolute;
+      top: -40px; left: 60px;
+      width: 180px; height: 180px;
+      border: 30px solid rgba(255,255,255,0.04);
+      border-radius: 50%;
+    }
+
+    .brand-block { position: relative; z-index: 1; }
+
+    .brand-logo {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 40px;
+    }
+
+    .brand-logo-mark {
+      width: 48px; height: 48px;
+      background: var(--mahle-orange);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    .brand-logo-mark svg { width: 26px; height: 26px; fill: white; }
+
+    .brand-name {
+      font-family: var(--font-condensed);
+      font-weight: 800;
+      font-size: 1.6rem;
+      color: white;
+      letter-spacing: 0.06em;
+    }
+
+    .brand-tagline {
+      font-family: var(--font-condensed);
+      font-size: 2rem;
+      font-weight: 700;
+      color: white;
+      line-height: 1.15;
+      margin-bottom: 16px;
+    }
+
+    .brand-tagline span { color: var(--mahle-orange-light); }
+
+    .brand-desc {
+      font-size: 0.875rem;
+      color: rgba(255,255,255,0.5);
+      line-height: 1.7;
+      max-width: 280px;
+    }
+
+    .feature-list {
+      display: flex; flex-direction: column; gap: 12px;
+      position: relative; z-index: 1;
+    }
+
+    .feature-item {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 0.82rem;
+      color: rgba(255,255,255,0.6);
+    }
+
+    .feature-dot {
+      width: 6px; height: 6px;
+      background: var(--mahle-orange);
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* Right panel */
+    .login-panel-right {
+      width: 380px;
+      background: white;
+      padding: 48px 40px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .login-heading {
+      font-family: var(--font-condensed);
+      font-weight: 800;
+      font-size: 1.6rem;
+      color: var(--mahle-blue);
+      margin-bottom: 4px;
+    }
+
+    .login-sub {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-bottom: 32px;
+    }
+
+    .login-form { display: flex; flex-direction: column; gap: 0; }
+
+    .login-form .form-group { margin-bottom: 18px; }
+
+    .login-form .form-control {
+      padding: 11px 14px;
+      font-size: 0.925rem;
+    }
+
+    .btn-login {
+      width: 100%;
+      padding: 12px;
+      font-size: 0.95rem;
+      margin-top: 8px;
+      justify-content: center;
+      letter-spacing: 0.04em;
+    }
+
+    .login-error {
+      background: var(--red-bg);
+      border: 1px solid #fca5a5;
+      color: var(--red);
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      font-size: 0.85rem;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .login-footer {
+      margin-top: 28px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    @media (max-width: 700px) {
+      .login-panel-left { display: none; }
+      .login-panel-right { width: 100%; padding: 36px 28px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <div class="bg-glow"></div>
+  <div class="bg-glow-2"></div>
+
+  <div class="login-wrapper">
+    <!-- Left brand panel -->
+    <div class="login-panel-left">
+      <div class="brand-block">
+        <div class="brand-logo">
+          <div class="brand-logo-mark">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/>
+            </svg>
+          </div>
+          <div class="brand-name">MAHLE</div>
+        </div>
+        <div class="brand-tagline">
+          Production<br/><span>Intelligence</span><br/>Platform
+        </div>
+        <div class="brand-desc">
+          Real-time manufacturing data for thermal systems production lines. Track, analyse, and optimise.
+        </div>
+      </div>
+      <div class="feature-list">
+        <div class="feature-item"><div class="feature-dot"></div>Multi-line production tracking</div>
+        <div class="feature-item"><div class="feature-dot"></div>Hourly output vs target monitoring</div>
+        <div class="feature-item"><div class="feature-dot"></div>Downtime analysis & reporting</div>
+        <div class="feature-item"><div class="feature-dot"></div>Efficiency & productivity metrics</div>
+        <div class="feature-item"><div class="feature-dot"></div>Role-based access control</div>
+      </div>
+    </div>
+
+    <!-- Right login panel -->
+    <div class="login-panel-right">
+      <div class="login-heading">Welcome back</div>
+      <div class="login-sub">Sign in to your MAHLE account</div>
+
+      <div class="login-error" id="loginError"></div>
+
+      <div class="login-form">
+        <div class="form-group">
+          <label class="form-label">Email Address</label>
+          <input type="email" class="form-control" id="email" placeholder="you@mahle.com" autocomplete="email"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input type="password" class="form-control" id="password" placeholder="••••••••" autocomplete="current-password"/>
+        </div>
+        <button class="btn btn-orange btn-login" id="loginBtn" onclick="handleLogin()">
+          Sign In →
+        </button>
+      </div>
+
+      <div class="login-footer">
+        MAHLE Thermal Systems &copy; 2025<br/>
+        Contact your administrator for access
+      </div>
+    </div>
+  </div>
+
+  <script src="assets/js/config.js"></script>
+  <script>
+    // Redirect if already logged in
+    if (Auth.isLoggedIn()) window.location.href = 'dashboard.html';
+
+    // Enter key support
+    document.getElementById('password').addEventListener('keydown', e => {
+      if (e.key === 'Enter') handleLogin();
+    });
+
+    async function handleLogin() {
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const btn = document.getElementById('loginBtn');
+      const errBox = document.getElementById('loginError');
+
+      errBox.style.display = 'none';
+
+      if (!email || !password) {
+        errBox.textContent = 'Please enter your email and password.';
+        errBox.style.display = 'block';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Signing in...';
+
+      try {
+        const data = await API.post('/api/auth/login', { email, password });
+        Auth.setSession(data.access_token, data.user);
+        window.location.href = 'dashboard.html';
+      } catch (err) {
+        errBox.textContent = err.message || 'Invalid credentials. Please try again.';
+        errBox.style.display = 'block';
+        btn.disabled = false;
+        btn.innerHTML = 'Sign In →';
+      }
+    }
+  </script>
+</body>
+</html>

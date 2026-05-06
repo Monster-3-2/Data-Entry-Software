@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Analytics — MAHLE Production</title>
+  <link rel="stylesheet" href="../assets/css/main.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    .app-layout { display: flex; min-height: 100vh; }
+    .main-content { margin-left: var(--sidebar-width); flex: 1; display: flex; flex-direction: column; }
+    .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .chart-full { grid-column: 1 / -1; }
+    .chart-container { height: 280px; }
+    .chart-container-sm { height: 220px; }
+    .metric-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+    .metric-chip {
+      flex: 1; min-width: 160px;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 14px 18px;
+      box-shadow: var(--shadow-sm);
+    }
+    .metric-chip-val { font-family: var(--font-condensed); font-size: 2rem; font-weight: 700; line-height: 1; }
+    .metric-chip-label { font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; margin-top: 4px; }
+    .eff-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    .eff-table th { text-align: left; padding: 8px 12px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); font-weight: 600; border-bottom: 2px solid var(--border); }
+    .eff-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+    .eff-table tr:last-child td { border-bottom: none; }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-title">Analytics & Performance</div>
+      <div class="topbar-actions">
+        <select class="form-control" id="periodFilter" style="width:140px" onchange="loadAll()">
+          <option value="today">Today</option>
+          <option value="week" selected>This Week</option>
+          <option value="month">This Month</option>
+        </select>
+        <select class="form-control" id="lineFilter" style="width:140px" onchange="loadAll()">
+          <option value="">All Lines</option>
+        </select>
+        <input type="date" class="form-control" id="fromDate" style="width:150px"/>
+        <input type="date" class="form-control" id="toDate" style="width:150px"/>
+        <button class="btn btn-primary btn-sm" onclick="loadAll()">Apply</button>
+      </div>
+    </div>
+
+    <div class="page-content">
+
+      <!-- KPI Row -->
+      <div class="metric-row" id="metricRow">
+        <div class="metric-chip"><div class="metric-chip-val" id="mOutput" style="color:var(--mahle-blue-light)">—</div><div class="metric-chip-label">Total Output</div></div>
+        <div class="metric-chip"><div class="metric-chip-val" id="mTarget" style="color:var(--mahle-orange)">—</div><div class="metric-chip-label">Total Target</div></div>
+        <div class="metric-chip"><div class="metric-chip-val" id="mEff">—</div><div class="metric-chip-label">Overall Efficiency</div></div>
+        <div class="metric-chip"><div class="metric-chip-val" id="mDT" style="color:var(--red)">—</div><div class="metric-chip-label">Downtime (min)</div></div>
+      </div>
+
+      <div class="charts-grid">
+
+        <!-- Daily Trend — full width -->
+        <div class="card chart-full">
+          <div class="card-header"><div class="card-title">Daily Output Trend</div></div>
+          <div class="card-body"><div class="chart-container"><canvas id="dailyChart"></canvas></div></div>
+        </div>
+
+        <!-- Target vs Output per line -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">Target vs Output by Line</div></div>
+          <div class="card-body"><div class="chart-container chart-container-sm"><canvas id="lineChart"></canvas></div></div>
+        </div>
+
+        <!-- Downtime Reasons -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">Downtime Reasons Breakdown</div></div>
+          <div class="card-body"><div class="chart-container chart-container-sm"><canvas id="downtimeChart"></canvas></div></div>
+        </div>
+
+        <!-- Manpower Utilization -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">Units per Man-Day by Line</div></div>
+          <div class="card-body"><div class="chart-container chart-container-sm"><canvas id="manpowerChart"></canvas></div></div>
+        </div>
+
+        <!-- Efficiency Table -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">Efficiency & Productivity</div></div>
+          <div class="card-body" style="padding:0">
+            <table class="eff-table" id="effTable">
+              <thead><tr><th>Line</th><th>Output</th><th>Target</th><th>Efficiency</th><th>U/ManDay</th></tr></thead>
+              <tbody id="effBody"><tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted)">Loading...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/config.js"></script>
+<script src="../assets/js/layout.js"></script>
+<script>
+  Auth.requireAuth(['admin','operator','viewer']);
+  buildLayout('analytics');
+
+  let charts = {};
+
+  async function init() {
+    const lines = await API.get('/api/master/lines');
+    lines.forEach(l => document.getElementById('lineFilter').add(new Option(l.name, l.id)));
+
+    const today = new Date().toISOString().split('T')[0];
+    const month = new Date(Date.now() - 29*86400000).toISOString().split('T')[0];
+    document.getElementById('toDate').value = today;
+    document.getElementById('fromDate').value = month;
+
+    loadAll();
+  }
+
+  function getParams() {
+    const period = document.getElementById('periodFilter').value;
+    const lineId = document.getElementById('lineFilter').value;
+    const from = document.getElementById('fromDate').value;
+    const to   = document.getElementById('toDate').value;
+    let q = `period=${period}`;
+    if (lineId) q += `&line_id=${lineId}`;
+    if (from && to) q += `&from_date=${from}&to_date=${to}`;
+    return q;
+  }
+
+  async function loadAll() {
+    await Promise.all([
+      loadSummary(),
+      loadDailyTrend(),
+      loadLineChart(),
+      loadDowntime(),
+      loadManpower(),
+      loadEfficiency(),
+    ]);
+  }
+
+  async function loadSummary() {
+    const q = getParams();
+    const d = await API.get('/api/analytics/summary?' + q);
+    document.getElementById('mOutput').textContent = (d.total_output || 0).toLocaleString();
+    document.getElementById('mTarget').textContent = (d.total_target || 0).toLocaleString();
+    const eff = efficiency(d.total_output, d.total_target);
+    document.getElementById('mEff').textContent = eff + '%';
+    document.getElementById('mEff').style.color = efficiencyColor(eff);
+    document.getElementById('mDT').textContent = (d.total_downtime_mins || 0).toLocaleString();
+  }
+
+  async function loadDailyTrend() {
+    const lineId = document.getElementById('lineFilter').value;
+    const from = document.getElementById('fromDate').value;
+    const to   = document.getElementById('toDate').value;
+    let q = `from_date=${from}&to_date=${to}`;
+    if (lineId) q += `&line_id=${lineId}`;
+    const data = await API.get('/api/analytics/daily-trend?' + q);
+
+    destroyChart('dailyChart');
+    charts['dailyChart'] = new Chart(document.getElementById('dailyChart'), {
+      type: 'line',
+      data: {
+        labels: data.map(d => d.date),
+        datasets: [
+          { label: 'Output', data: data.map(d => d.output), borderColor: 'var(--mahle-blue-light)', backgroundColor: 'rgba(0,119,204,0.08)', fill: true, tension: 0.3, pointRadius: 3 },
+          { label: 'Target', data: data.map(d => d.target), borderColor: 'var(--mahle-orange)', borderDash: [5,4], fill: false, tension: 0.3, pointRadius: 2 },
+        ]
+      },
+      options: chartOpts('line')
+    });
+  }
+
+  async function loadLineChart() {
+    const q = getParams();
+    const d = await API.get('/api/analytics/summary?' + q);
+    const lines = d.lines || [];
+
+    destroyChart('lineChart');
+    charts['lineChart'] = new Chart(document.getElementById('lineChart'), {
+      type: 'bar',
+      data: {
+        labels: lines.map(l => l.line_name),
+        datasets: [
+          { label: 'Output', data: lines.map(l => l.output), backgroundColor: 'rgba(0,119,204,0.75)', borderRadius: 4 },
+          { label: 'Target', data: lines.map(l => l.target), backgroundColor: 'rgba(232,119,34,0.3)', borderColor: 'var(--mahle-orange)', borderWidth: 1, borderRadius: 4 },
+        ]
+      },
+      options: chartOpts('bar')
+    });
+  }
+
+  async function loadDowntime() {
+    const q = getParams();
+    const data = await API.get('/api/analytics/downtime?' + q);
+    destroyChart('downtimeChart');
+    if (!data.length) return;
+    charts['downtimeChart'] = new Chart(document.getElementById('downtimeChart'), {
+      type: 'doughnut',
+      data: {
+        labels: data.map(d => d.reason),
+        datasets: [{ data: data.map(d => d.minutes), backgroundColor: ['#003E6B','#005A9E','#0077CC','#E87722','#F59D3D','#1A9B5F','#D97706','#DC2626'], borderWidth: 2, borderColor: '#fff' }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { family:'Barlow', size:11 }, padding: 8 } } } }
+    });
+  }
+
+  async function loadManpower() {
+    const q = getParams();
+    const data = await API.get('/api/analytics/manpower?' + q);
+    destroyChart('manpowerChart');
+    charts['manpowerChart'] = new Chart(document.getElementById('manpowerChart'), {
+      type: 'bar',
+      data: {
+        labels: data.map(d => d.line_name),
+        datasets: [{ label: 'Units/ManDay', data: data.map(d => d.units_per_man_day), backgroundColor: 'rgba(26,155,95,0.7)', borderRadius: 4 }]
+      },
+      options: chartOpts('bar')
+    });
+  }
+
+  async function loadEfficiency() {
+    const q = getParams();
+    const data = await API.get('/api/analytics/efficiency?' + q);
+    document.getElementById('effBody').innerHTML = data.length ? data.map(row => {
+      const color = efficiencyColor(row.efficiency);
+      return `<tr>
+        <td><strong>${row.line_name}</strong></td>
+        <td style="font-family:var(--font-mono)">${(row.total_output||0).toLocaleString()}</td>
+        <td style="font-family:var(--font-mono)">${(row.total_target||0).toLocaleString()}</td>
+        <td style="font-family:var(--font-condensed);font-weight:700;color:${color}">${row.efficiency}%</td>
+        <td style="font-family:var(--font-mono)">${row.units_per_man_day}</td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:20px">No data</td></tr>';
+  }
+
+  function destroyChart(id) {
+    if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+  }
+
+  function chartOpts(type) {
+    return {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top', labels: { font: { family: 'Barlow', size: 12 } } } },
+      scales: {
+        y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.04)' } },
+        x: { grid: { display: false } }
+      }
+    };
+  }
+
+  init();
+</script>
+</body>
+</html>

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Shifts — MAHLE</title>
+  <link rel="stylesheet" href="../assets/css/main.css"/>
+  <style>
+    .app-layout { display: flex; min-height: 100vh; }
+    .main-content { margin-left: var(--sidebar-width); flex: 1; display: flex; flex-direction: column; }
+    .shifts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+    td.editable input { width: 100%; padding: 4px 8px; font-size: 0.875rem; border: 1px solid var(--mahle-blue-light); border-radius: 4px; }
+    .time-badge {
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      background: rgba(0,62,107,0.07);
+      padding: 2px 8px;
+      border-radius: 4px;
+      color: var(--mahle-blue);
+    }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <div class="main-content">
+    <div class="topbar"><div class="topbar-title">Shift Timings</div></div>
+    <div class="page-content">
+      <div class="shifts-grid">
+
+        <!-- Shifts Table -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Configured Shifts / Hours</div>
+            <span id="shiftCount" style="font-size:0.78rem;color:var(--text-muted)"></span>
+          </div>
+          <div class="table-wrapper" style="border:none;border-radius:0">
+            <table>
+              <thead><tr><th>#</th><th>Name</th><th>Start</th><th>End</th><th>Active</th><th></th></tr></thead>
+              <tbody id="shiftsBody">
+                <tr><td colspan="6"><div class="loading-state"><span class="spinner"></span></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Add Shift -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">Add New Shift</div></div>
+          <div class="card-body">
+            <div class="form-group">
+              <label class="form-label">Shift / Hour Name *</label>
+              <input class="form-control" id="newShiftName" placeholder="e.g. Hour 1, Morning Shift"/>
+            </div>
+            <div class="form-row form-row-2">
+              <div class="form-group">
+                <label class="form-label">Start Time *</label>
+                <input type="time" class="form-control" id="newStart"/>
+              </div>
+              <div class="form-group">
+                <label class="form-label">End Time *</label>
+                <input type="time" class="form-control" id="newEnd"/>
+              </div>
+            </div>
+            <button class="btn btn-orange" style="width:100%" onclick="addShift()">+ Add Shift</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/config.js"></script>
+<script src="../assets/js/layout.js"></script>
+<script>
+  Auth.requireAuth(['admin']);
+  buildLayout('shifts');
+
+  async function loadShifts() {
+    const shifts = await API.get('/api/master/shifts');
+    document.getElementById('shiftCount').textContent = `${shifts.length} shifts`;
+    document.getElementById('shiftsBody').innerHTML = shifts.length ? shifts.map((s, i) => `
+      <tr id="shift-${s.id}">
+        <td>${i+1}</td>
+        <td class="editable" onclick="inlineEdit(this,'${s.id}','name')">${s.name}</td>
+        <td><span class="time-badge">${s.start_time}</span></td>
+        <td><span class="time-badge">${s.end_time}</span></td>
+        <td><input type="checkbox" ${s.is_active?'checked':''} onchange="toggleShift('${s.id}',this.checked)"/></td>
+        <td><button class="btn btn-danger btn-sm" onclick="deleteShift('${s.id}')">Del</button></td>
+      </tr>`).join('') :
+      '<tr><td colspan="6"><div class="empty-state"><div class="empty-state-icon">🕐</div><div>No shifts configured</div></div></td></tr>';
+  }
+
+  function inlineEdit(td, id, field) {
+    if (td.querySelector('input')) return;
+    const cur = td.textContent.trim();
+    const inp = document.createElement('input');
+    inp.value = cur; inp.className = 'form-control';
+    td.innerHTML = ''; td.appendChild(inp); inp.focus();
+    inp.addEventListener('blur', async () => {
+      const val = inp.value.trim() || cur;
+      td.textContent = val;
+      if (val !== cur) {
+        try { await API.put(`/api/master/shifts/${id}`, { [field]: val }); showToast('Updated', 'success'); }
+        catch (e) { showToast('Failed', 'error'); td.textContent = cur; }
+      }
+    });
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
+  }
+
+  async function addShift() {
+    const name  = document.getElementById('newShiftName').value.trim();
+    const start = document.getElementById('newStart').value;
+    const end   = document.getElementById('newEnd').value;
+    if (!name || !start || !end) { showToast('All fields required', 'error'); return; }
+    try {
+      await API.post('/api/master/shifts', { name, start_time: start, end_time: end });
+      document.getElementById('newShiftName').value = '';
+      document.getElementById('newStart').value = '';
+      document.getElementById('newEnd').value = '';
+      showToast('Shift added', 'success');
+      loadShifts();
+    } catch (e) { showToast(e.message, 'error'); }
+  }
+
+  async function toggleShift(id, val) {
+    await API.put(`/api/master/shifts/${id}`, { is_active: val });
+    showToast('Updated', 'success');
+  }
+
+  async function deleteShift(id) {
+    if (!confirm('Delete this shift?')) return;
+    try { await API.delete(`/api/master/shifts/${id}`); showToast('Deleted', 'success'); loadShifts(); }
+    catch (e) { showToast(e.message, 'error'); }
+  }
+
+  loadShifts();
+</script>
+</body>
+</html>

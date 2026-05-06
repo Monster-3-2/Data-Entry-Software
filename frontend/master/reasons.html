@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Downtime Reasons — MAHLE</title>
+  <link rel="stylesheet" href="../assets/css/main.css"/>
+  <style>
+    .app-layout { display: flex; min-height: 100vh; }
+    .main-content { margin-left: var(--sidebar-width); flex: 1; display: flex; flex-direction: column; }
+    .reasons-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; align-items: start; }
+    td.editable input { width: 100%; padding: 4px 8px; font-size: 0.875rem; border: 1px solid var(--mahle-blue-light); border-radius: 4px; }
+    .cat-badge {
+      font-size: 0.72rem; font-weight: 600;
+      padding: 2px 8px; border-radius: 20px;
+      background: rgba(0,62,107,0.08); color: var(--mahle-blue);
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <div class="main-content">
+    <div class="topbar"><div class="topbar-title">Downtime Reasons</div></div>
+    <div class="page-content">
+      <div class="reasons-grid">
+
+        <!-- Reasons Table -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Downtime Reasons List</div>
+            <span id="reasonCount" style="font-size:0.78rem;color:var(--text-muted)"></span>
+          </div>
+          <div class="table-wrapper" style="border:none;border-radius:0">
+            <table>
+              <thead><tr><th>#</th><th>Reason</th><th>Category</th><th>Active</th><th></th></tr></thead>
+              <tbody id="reasonsBody">
+                <tr><td colspan="5"><div class="loading-state"><span class="spinner"></span></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Add Reason -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">Add Reason</div></div>
+          <div class="card-body">
+            <div class="form-group">
+              <label class="form-label">Reason *</label>
+              <input class="form-control" id="newReason" placeholder="e.g. Tool Breakage"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Category</label>
+              <select class="form-control" id="newCategory">
+                <option value="">— Select —</option>
+                <option value="Machine">Machine</option>
+                <option value="Material">Material</option>
+                <option value="Manpower">Manpower</option>
+                <option value="Quality">Quality</option>
+                <option value="Utility">Utility</option>
+                <option value="Process">Process</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <button class="btn btn-orange" style="width:100%" onclick="addReason()">+ Add Reason</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/config.js"></script>
+<script src="../assets/js/layout.js"></script>
+<script>
+  Auth.requireAuth(['admin']);
+  buildLayout('reasons');
+
+  const CATEGORIES = { Machine:'#003E6B', Material:'#E87722', Manpower:'#1A9B5F', Quality:'#DC2626', Utility:'#7C3AED', Process:'#D97706', Other:'#64748B' };
+
+  async function loadReasons() {
+    const reasons = await API.get('/api/master/reasons');
+    document.getElementById('reasonCount').textContent = `${reasons.length} reasons`;
+    document.getElementById('reasonsBody').innerHTML = reasons.length ? reasons.map((r, i) => `
+      <tr id="reason-${r.id}">
+        <td>${i+1}</td>
+        <td class="editable" onclick="inlineEdit(this,'${r.id}','reason')">${r.reason}</td>
+        <td class="editable" onclick="inlineCatEdit(this,'${r.id}','${r.category||''}')">
+          ${r.category ? `<span class="cat-badge" style="background:${CATEGORIES[r.category]||'#64748B'}18;color:${CATEGORIES[r.category]||'#64748B'}">${r.category}</span>` : '—'}
+        </td>
+        <td><input type="checkbox" ${r.is_active?'checked':''} onchange="toggleReason('${r.id}',this.checked)"/></td>
+        <td><button class="btn btn-danger btn-sm" onclick="deleteReason('${r.id}')">Del</button></td>
+      </tr>`).join('') :
+      '<tr><td colspan="5"><div class="empty-state"><div class="empty-state-icon">⚠️</div><div>No reasons configured</div></div></td></tr>';
+  }
+
+  function inlineEdit(td, id, field) {
+    if (td.querySelector('input')) return;
+    const cur = td.textContent.trim();
+    const inp = document.createElement('input');
+    inp.value = cur; inp.className = 'form-control';
+    td.innerHTML = ''; td.appendChild(inp); inp.focus();
+    inp.addEventListener('blur', async () => {
+      const val = inp.value.trim() || cur;
+      td.textContent = val;
+      if (val !== cur) {
+        try { await API.put(`/api/master/reasons/${id}`, { [field]: val }); showToast('Updated', 'success'); }
+        catch (e) { showToast('Failed', 'error'); td.textContent = cur; }
+      }
+    });
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
+  }
+
+  function inlineCatEdit(td, id, cur) {
+    if (td.querySelector('select')) return;
+    const sel = document.createElement('select');
+    sel.className = 'form-control';
+    ['','Machine','Material','Manpower','Quality','Utility','Process','Other'].forEach(c => sel.add(new Option(c||'—', c)));
+    sel.value = cur;
+    td.innerHTML = ''; td.appendChild(sel); sel.focus();
+    sel.addEventListener('blur', async () => {
+      const val = sel.value;
+      await API.put(`/api/master/reasons/${id}`, { category: val || null });
+      showToast('Updated', 'success');
+      loadReasons();
+    });
+  }
+
+  async function addReason() {
+    const reason = document.getElementById('newReason').value.trim();
+    const category = document.getElementById('newCategory').value;
+    if (!reason) { showToast('Reason text required', 'error'); return; }
+    try {
+      await API.post('/api/master/reasons', { reason, category: category || null });
+      document.getElementById('newReason').value = '';
+      document.getElementById('newCategory').value = '';
+      showToast('Reason added', 'success');
+      loadReasons();
+    } catch (e) { showToast(e.message, 'error'); }
+  }
+
+  async function toggleReason(id, val) {
+    await API.put(`/api/master/reasons/${id}`, { is_active: val });
+    showToast('Updated', 'success');
+  }
+
+  async function deleteReason(id) {
+    if (!confirm('Delete this reason?')) return;
+    try { await API.delete(`/api/master/reasons/${id}`); showToast('Deleted', 'success'); loadReasons(); }
+    catch (e) { showToast(e.message, 'error'); }
+  }
+
+  loadReasons();
+</script>
+</body>
+</html>
