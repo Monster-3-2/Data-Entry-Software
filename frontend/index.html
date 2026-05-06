@@ -16,7 +16,6 @@
       position: relative;
     }
 
-    /* Animated background grid */
     .bg-grid {
       position: fixed; inset: 0;
       background-image:
@@ -42,12 +41,10 @@
       pointer-events: none;
     }
 
-    /* Login wrapper */
     .login-wrapper {
       display: flex;
       width: 900px;
       max-width: 95vw;
-      min-height: 560px;
       border-radius: 20px;
       overflow: hidden;
       box-shadow: 0 30px 80px rgba(0,0,0,0.4);
@@ -55,7 +52,6 @@
       z-index: 1;
     }
 
-    /* Left panel */
     .login-panel-left {
       flex: 1;
       background: linear-gradient(145deg, #002C4E 0%, #003E6B 50%, #005A9E 100%);
@@ -145,14 +141,14 @@
       flex-shrink: 0;
     }
 
-    /* Right panel */
     .login-panel-right {
       width: 380px;
       background: white;
-      padding: 48px 40px;
+      padding: 40px;
       display: flex;
       flex-direction: column;
       justify-content: center;
+      overflow-y: auto;
     }
 
     .login-heading {
@@ -166,12 +162,10 @@
     .login-sub {
       font-size: 0.85rem;
       color: var(--text-muted);
-      margin-bottom: 32px;
+      margin-bottom: 24px;
     }
 
-    .login-form { display: flex; flex-direction: column; gap: 0; }
-
-    .login-form .form-group { margin-bottom: 18px; }
+    .login-form .form-group { margin-bottom: 16px; }
 
     .login-form .form-control {
       padding: 11px 14px;
@@ -182,7 +176,7 @@
       width: 100%;
       padding: 12px;
       font-size: 0.95rem;
-      margin-top: 8px;
+      margin-top: 4px;
       justify-content: center;
       letter-spacing: 0.04em;
     }
@@ -194,22 +188,63 @@
       border-radius: var(--radius);
       padding: 10px 14px;
       font-size: 0.85rem;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
       display: none;
     }
 
-    .login-footer {
-      margin-top: 28px;
-      padding-top: 24px;
-      border-top: 1px solid var(--border);
-      text-align: center;
+    .login-success {
+      background: var(--green-bg);
+      border: 1px solid #6ee7b7;
+      color: var(--green);
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      font-size: 0.85rem;
+      margin-bottom: 14px;
+      display: none;
+    }
+
+    .divider {
+      display: flex; align-items: center; gap: 10px;
+      margin: 20px 0;
+      color: var(--text-muted);
       font-size: 0.78rem;
+    }
+    .divider::before, .divider::after {
+      content: ''; flex: 1;
+      height: 1px; background: var(--border);
+    }
+
+    .tab-row {
+      display: flex; gap: 0;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+    .tab-btn {
+      flex: 1; padding: 9px;
+      border: none; background: transparent;
+      font-family: var(--font-main);
+      font-size: 0.85rem; font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .tab-btn.active {
+      background: var(--mahle-blue);
+      color: white;
+    }
+
+    .login-footer {
+      margin-top: 20px;
+      text-align: center;
+      font-size: 0.75rem;
       color: var(--text-muted);
     }
 
     @media (max-width: 700px) {
       .login-panel-left { display: none; }
-      .login-panel-right { width: 100%; padding: 36px 28px; }
+      .login-panel-right { width: 100%; padding: 32px 24px; }
     }
   </style>
 </head>
@@ -246,56 +281,95 @@
       </div>
     </div>
 
-    <!-- Right login panel -->
+    <!-- Right panel -->
     <div class="login-panel-right">
-      <div class="login-heading">Welcome back</div>
-      <div class="login-sub">Sign in to your MAHLE account</div>
+      <div class="login-heading" id="panelHeading">Welcome back</div>
+      <div class="login-sub" id="panelSub">Sign in to your MAHLE account</div>
 
-      <div class="login-error" id="loginError"></div>
+      <!-- Tabs -->
+      <div class="tab-row">
+        <button class="tab-btn active" id="tabSignin" onclick="switchTab('signin')">Sign In</button>
+        <button class="tab-btn" id="tabSignup" onclick="switchTab('signup')">Sign Up</button>
+      </div>
 
-      <div class="login-form">
-        <div class="form-group">
-          <label class="form-label">Email Address</label>
-          <input type="email" class="form-control" id="email" placeholder="you@mahle.com" autocomplete="email"/>
+      <!-- Sign In Form -->
+      <div id="signinForm">
+        <div class="login-error" id="loginError"></div>
+        <div class="login-form">
+          <div class="form-group">
+            <label class="form-label">Email Address</label>
+            <input type="email" class="form-control" id="email" placeholder="you@mahle.com" autocomplete="email"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" class="form-control" id="password" placeholder="••••••••" autocomplete="current-password"/>
+          </div>
+          <button class="btn btn-orange btn-login" id="loginBtn" onclick="handleLogin()">
+            Sign In →
+          </button>
         </div>
-        <div class="form-group">
-          <label class="form-label">Password</label>
-          <input type="password" class="form-control" id="password" placeholder="••••••••" autocomplete="current-password"/>
+      </div>
+
+      <!-- Sign Up Form -->
+      <div id="signupForm" style="display:none">
+        <div class="login-error" id="regError"></div>
+        <div class="login-success" id="regSuccess"></div>
+        <div class="login-form">
+          <div class="form-group">
+            <label class="form-label">Full Name</label>
+            <input type="text" class="form-control" id="regName" placeholder="Your full name"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email Address</label>
+            <input type="email" class="form-control" id="regEmail" placeholder="you@mahle.com"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" class="form-control" id="regPassword" placeholder="Min 8 characters"/>
+          </div>
+          <button class="btn btn-primary btn-login" id="regBtn" onclick="handleRegister()">
+            Create Account →
+          </button>
         </div>
-        <button class="btn btn-orange btn-login" id="loginBtn" onclick="handleLogin()">
-          Sign In →
-        </button>
+        <div style="margin-top:12px;font-size:0.78rem;color:var(--text-muted);text-align:center">
+          New accounts are created as <strong>Operator</strong> role.<br/>Contact admin to change role.
+        </div>
       </div>
 
       <div class="login-footer">
-        MAHLE Thermal Systems &copy; 2025<br/>
-        Contact your administrator for access
+        MAHLE Thermal Systems &copy; 2025
       </div>
     </div>
   </div>
 
   <script src="assets/js/config.js"></script>
   <script>
-    // Redirect if already logged in
     if (Auth.isLoggedIn()) window.location.href = 'dashboard.html';
 
-    // Enter key support
     document.getElementById('password').addEventListener('keydown', e => {
       if (e.key === 'Enter') handleLogin();
     });
 
+    function switchTab(tab) {
+      const isSignin = tab === 'signin';
+      document.getElementById('signinForm').style.display = isSignin ? 'block' : 'none';
+      document.getElementById('signupForm').style.display = isSignin ? 'none' : 'block';
+      document.getElementById('tabSignin').classList.toggle('active', isSignin);
+      document.getElementById('tabSignup').classList.toggle('active', !isSignin);
+      document.getElementById('panelHeading').textContent = isSignin ? 'Welcome back' : 'Create account';
+      document.getElementById('panelSub').textContent = isSignin ? 'Sign in to your MAHLE account' : 'Register as an Operator';
+    }
+
     async function handleLogin() {
-      const email = document.getElementById('email').value.trim();
+      const email    = document.getElementById('email').value.trim();
       const password = document.getElementById('password').value;
-      const btn = document.getElementById('loginBtn');
-      const errBox = document.getElementById('loginError');
+      const btn      = document.getElementById('loginBtn');
+      const errBox   = document.getElementById('loginError');
 
       errBox.style.display = 'none';
-
       if (!email || !password) {
         errBox.textContent = 'Please enter your email and password.';
-        errBox.style.display = 'block';
-        return;
+        errBox.style.display = 'block'; return;
       }
 
       btn.disabled = true;
@@ -311,6 +385,46 @@
         btn.disabled = false;
         btn.innerHTML = 'Sign In →';
       }
+    }
+
+    async function handleRegister() {
+      const name     = document.getElementById('regName').value.trim();
+      const email    = document.getElementById('regEmail').value.trim();
+      const password = document.getElementById('regPassword').value;
+      const btn      = document.getElementById('regBtn');
+      const errBox   = document.getElementById('regError');
+      const sucBox   = document.getElementById('regSuccess');
+
+      errBox.style.display = 'none';
+      sucBox.style.display = 'none';
+
+      if (!name || !email || !password) {
+        errBox.textContent = 'All fields are required.';
+        errBox.style.display = 'block'; return;
+      }
+      if (password.length < 8) {
+        errBox.textContent = 'Password must be at least 8 characters.';
+        errBox.style.display = 'block'; return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Creating account...';
+
+      try {
+        await API.post('/api/auth/register', { name, email, password });
+        sucBox.textContent = 'Account created! You can now sign in.';
+        sucBox.style.display = 'block';
+        document.getElementById('regName').value = '';
+        document.getElementById('regEmail').value = '';
+        document.getElementById('regPassword').value = '';
+        setTimeout(() => switchTab('signin'), 2000);
+      } catch (err) {
+        errBox.textContent = err.message || 'Registration failed. Try again.';
+        errBox.style.display = 'block';
+      }
+
+      btn.disabled = false;
+      btn.innerHTML = 'Create Account →';
     }
   </script>
 </body>
