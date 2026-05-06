@@ -4,7 +4,7 @@
 // ============================================================
 
 const CONFIG = {
-  BACKEND_URL: 'http://localhost:8000',  // Replace with Render URL after deploy
+  BACKEND_URL: 'https://data-entry-software-jx8u.onrender.com',  
   APP_NAME: 'MAHLE Production',
   APP_TAGLINE: 'Thermal Systems Manufacturing Intelligence',
 };
