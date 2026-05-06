@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # MAHLE Production Management System
 
 Automobile thermal systems production tracking platform.
@@ -51,3 +52,7 @@ mahle-production/
 | Admin | Full control — master data, production, analytics, users |
 | Operator | Production entry only |
 | Viewer | Analytics & graphs only (read-only) |
+=======
+# Data-Entry-Software
+helps manage data and analyse it
+>>>>>>> dea1723ecac74ae39931e4be73151102f2eb6e0b
