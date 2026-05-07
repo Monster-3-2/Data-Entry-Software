@@ -70,7 +70,7 @@ function buildLayout(activePage) {
     <aside class="sidebar" id="sidebar">
       <a class="sidebar-logo" href="/dashboard.html">
         <div class="logo-mark">
-          <svg viewBox="0 0 24 24" fill="none" stroke="#1a1a1a" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13 L4 9 L7 8 L10 6 L14 6 L17 8 L21 9 L22 13 L22 16 L2 16 Z"/><circle cx="6" cy="16" r="2"/><circle cx="18" cy="16" r="2"/><rect x="13.5" y="2" width="3" height="9" rx="1.5"/><line x1="15" y1="10" x2="15" y2="6" stroke="#E87722" stroke-width="1.4"/><circle cx="15" cy="8" r="2.5" fill="#E87722" stroke="#1a1a1a"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="#1a1a1a" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13 L4 9 L7 8 L10 6 L14 6 L17 8 L21 9 L22 13 L22 16 L2 16 Z"/><circle cx="6" cy="16" r="2"/><circle cx="18" cy="16" r="2"/><rect x="13.5" y="2" width="3" height="9" rx="1.5"/><line x1="15" y1="10" x2="15" y2="6" stroke="#E87722" stroke-width="1.4"/><circle cx="15" cy="10" r="2.5" fill="#E87722" stroke="#1a1a1a"/></svg>
         </div>
         <div class="logo-text">
           <div class="logo-name">MAHLE</div>
