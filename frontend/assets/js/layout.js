@@ -70,7 +70,22 @@ function buildLayout(activePage) {
     <aside class="sidebar" id="sidebar">
       <a class="sidebar-logo" href="/dashboard.html">
         <div class="logo-mark">
-          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <!-- Radiator fins -->
+            <line x1="4" y1="4" x2="4" y2="20"/>
+            <line x1="8" y1="4" x2="8" y2="20"/>
+            <line x1="12" y1="4" x2="12" y2="20"/>
+            <line x1="16" y1="4" x2="16" y2="20"/>
+            <line x1="20" y1="4" x2="20" y2="20"/>
+            <!-- Top and bottom headers -->
+            <path d="M3 4 Q12 2 21 4" stroke-width="2"/>
+            <path d="M3 20 Q12 22 21 20" stroke-width="2"/>
+            <!-- Heat flow arrows -->
+            <path d="M6 10 Q7 8 6 6" stroke="rgba(255,180,80,0.9)" stroke-width="1.2"/>
+            <path d="M10 10 Q11 8 10 6" stroke="rgba(255,180,80,0.9)" stroke-width="1.2"/>
+            <path d="M14 10 Q15 8 14 6" stroke="rgba(255,180,80,0.9)" stroke-width="1.2"/>
+            <path d="M18 10 Q19 8 18 6" stroke="rgba(255,180,80,0.9)" stroke-width="1.2"/>
+          </svg>
         </div>
         <div class="logo-text">
           <div class="logo-name">MAHLE</div>
