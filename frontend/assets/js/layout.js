@@ -70,7 +70,7 @@ function buildLayout(activePage) {
     <aside class="sidebar" id="sidebar">
       <a class="sidebar-logo" href="/dashboard.html">
         <div class="logo-mark">
-          <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
             <!-- Car body -->
             <path d="M2 13 L4 9 L7 8 L10 6 L14 6 L17 8 L21 9 L22 13 L22 16 L2 16 Z"/>
             <!-- Wheels -->
