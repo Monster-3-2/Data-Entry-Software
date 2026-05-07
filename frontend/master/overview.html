@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Master Overview — MAHLE</title>
+  <link rel="stylesheet" href="../assets/css/main.css"/>
+  <style>
+    .app-layout { display: flex; min-height: 100vh; }
+    .main-content { margin-left: var(--sidebar-width); flex: 1; display: flex; flex-direction: column; }
+
+    /* Tabs */
+    .tab-nav {
+      display: flex; gap: 0;
+      border-bottom: 2px solid var(--border);
+      padding: 0 28px;
+      background: var(--bg-card);
+      overflow-x: auto;
+    }
+    .tab-nav-btn {
+      padding: 14px 20px;
+      border: none; background: none;
+      font-family: var(--font-main);
+      font-size: 0.875rem; font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      white-space: nowrap;
+      transition: all var(--transition);
+    }
+    .tab-nav-btn:hover { color: var(--mahle-blue); }
+    .tab-nav-btn.active {
+      color: var(--mahle-blue);
+      border-bottom-color: var(--mahle-orange);
+    }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Table styles */
+    thead th { font-size: 0.72rem; padding: 9px 12px; }
+    tbody td { padding: 9px 12px; font-size: 0.84rem; }
+    .num { font-family: var(--font-mono); font-size: 0.82rem; }
+    td.editable { cursor: pointer; }
+    td.editable:hover { background: rgba(0,119,204,0.04); }
+    td.editable input, td.editable select {
+      width: 100%; padding: 3px 7px;
+      border: 1px solid var(--mahle-blue-light);
+      border-radius: 4px; font-size: 0.84rem;
+      font-family: var(--font-main);
+    }
+    .read-only { color: var(--text-muted); font-size: 0.82rem; }
+
+    /* Target card grid */
+    .target-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .target-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
+    .target-card-head {
+      background: var(--mahle-blue);
+      padding: 12px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .target-card-title {
+      font-family: var(--font-condensed);
+      font-weight: 700; font-size: 0.95rem;
+      color: white; letter-spacing: 0.03em;
+    }
+    .target-card-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+    .target-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 10px;
+      background: var(--bg);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+    }
+    .target-label { font-size: 0.82rem; color: var(--text-secondary); font-weight: 500; }
+    .target-val {
+      font-family: var(--font-condensed);
+      font-size: 1.1rem; font-weight: 700;
+      color: var(--mahle-blue);
+    }
+    .target-val input {
+      width: 80px; text-align: right;
+      padding: 3px 6px;
+      border: 1px solid var(--mahle-blue-light);
+      border-radius: 4px;
+      font-family: var(--font-condensed);
+      font-size: 1rem; font-weight: 700;
+      color: var(--mahle-blue);
+    }
+
+    .inline-add {
+      display: flex; gap: 8px;
+      padding: 12px 14px;
+      border-top: 1px solid var(--border);
+      background: var(--bg);
+    }
+    .inline-add input, .inline-add select { flex: 1; }
+
+    tfoot td {
+      background: rgba(0,62,107,0.04);
+      font-weight: 700;
+      font-family: var(--font-condensed);
+      border-top: 2px solid var(--border);
+    }
+
+    .save-bar {
+      position: sticky; bottom: 0;
+      background: var(--mahle-blue);
+      padding: 12px 24px;
+      display: none;
+      align-items: center; justify-content: space-between;
+      gap: 12px; z-index: 10;
+    }
+    .save-bar.show { display: flex; }
+    .save-bar-msg { color: rgba(255,255,255,0.8); font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <div class="main-content">
+
+    <div class="topbar">
+      <div class="topbar-title">Master Data Overview</div>
+      <div class="topbar-actions" id="topbarActions"></div>
+    </div>
+
+    <!-- Tab Nav -->
+    <div class="tab-nav">
+      <button class="tab-nav-btn active" onclick="switchTab('products')">📦 Products</button>
+      <button class="tab-nav-btn" onclick="switchTab('lines')">🏭 Lines & Models</button>
+      <button class="tab-nav-btn" onclick="switchTab('shifts')">🕐 Shifts</button>
+      <button class="tab-nav-btn" onclick="switchTab('targets')">🎯 Targets per Manpower</button>
+    </div>
+
+    <div class="page-content">
+
+      <!-- ===================== TAB: PRODUCTS ===================== -->
+      <div class="tab-panel active" id="tab-products">
+        <div class="filter-bar" style="margin-bottom:16px">
+          <select class="form-control" id="pFilterLine" style="width:150px" onchange="onPFilterLine()">
+            <option value="">All Lines</option>
+          </select>
+          <select class="form-control" id="pFilterModel" style="width:150px" onchange="loadProductTab()">
+            <option value="">All Models</option>
+          </select>
+          <input type="text" class="form-control" id="pSearch" placeholder="Search ID / description..." style="width:220px" oninput="loadProductTab()"/>
+          <span style="margin-left:auto;font-size:0.82rem;color:var(--text-muted)" id="pCount"></span>
+        </div>
+        <div class="card">
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th><th>Product ID</th><th>Description</th>
+                  <th>Line</th><th>Model</th><th>Type</th>
+                  <th>Hourly Rate</th><th>EQ Factor</th><th>Persons</th>
+                  <th>Pitch Time</th><th>TE Time</th><th>Man Time</th>
+                  <th>Machine Time</th><th>Handling Unit</th>
+                  <th>Cycle Time</th><th>Cost</th><th>Active</th>
+                  <th id="pActCol"></th>
+                </tr>
+              </thead>
+              <tbody id="productBody">
+                <tr><td colspan="18"><div class="loading-state"><span class="spinner"></span></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="inline-add" id="pAddRow" style="display:none">
+            <select class="form-control" id="paLine" style="width:120px" onchange="loadPaModels()"><option value="">Line...</option></select>
+            <select class="form-control" id="paModel" style="width:120px" disabled><option value="">Model...</option></select>
+            <input class="form-control" id="paId" placeholder="Product ID" style="width:110px"/>
+            <input class="form-control" id="paDesc" placeholder="Description"/>
+            <input class="form-control" type="number" id="paHR" placeholder="Hr Rate" style="width:80px" value="32"/>
+            <input class="form-control" type="number" id="paPersons" placeholder="Persons" style="width:70px" value="10"/>
+            <input class="form-control" type="number" id="paCT" placeholder="Cycle T" style="width:70px" value="0"/>
+            <input class="form-control" type="number" id="paCost" placeholder="Cost" style="width:80px" value="0"/>
+            <button class="btn btn-orange btn-sm" onclick="addProduct()">+ Add</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================== TAB: LINES & MODELS ===================== -->
+      <div class="tab-panel" id="tab-lines">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Production Lines</div>
+              <span id="lineCount" style="font-size:0.78rem;color:var(--text-muted)"></span>
+            </div>
+            <div class="table-wrapper" style="border:none;border-radius:0">
+              <table>
+                <thead><tr><th>#</th><th>Line Name</th><th>Active</th><th id="lActCol"></th></tr></thead>
+                <tbody id="linesBody"><tr><td colspan="4"><div class="loading-state"><span class="spinner"></span></div></td></tr></tbody>
+              </table>
+            </div>
+            <div class="inline-add" id="lAddRow" style="display:none">
+              <input class="form-control" id="newLineName" placeholder="New line name"/>
+              <button class="btn btn-orange btn-sm" onclick="addLine()">+ Add</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Models</div>
+              <select class="form-control" id="mFilterLine" style="width:130px" onchange="loadModelsTab()">
+                <option value="">All Lines</option>
+              </select>
+            </div>
+            <div class="table-wrapper" style="border:none;border-radius:0">
+              <table>
+                <thead><tr><th>#</th><th>Model Name</th><th>Line</th><th>Active</th><th id="mActCol"></th></tr></thead>
+                <tbody id="modelsBody"><tr><td colspan="5"><div class="loading-state"><span class="spinner"></span></div></td></tr></tbody>
+              </table>
+            </div>
+            <div class="inline-add" id="mAddRow" style="display:none">
+              <select class="form-control" id="newModelLine" style="width:120px"><option value="">Line...</option></select>
+              <input class="form-control" id="newModelName" placeholder="Model name"/>
+              <button class="btn btn-orange btn-sm" onclick="addModel()">+ Add</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ===================== TAB: SHIFTS ===================== -->
+      <div class="tab-panel" id="tab-shifts">
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;align-items:start">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Configured Shifts / Hours</div>
+              <span id="shiftCount" style="font-size:0.78rem;color:var(--text-muted)"></span>
+            </div>
+            <div class="table-wrapper" style="border:none;border-radius:0">
+              <table>
+                <thead><tr><th>#</th><th>Name</th><th>Start</th><th>End</th><th>Duration</th><th>Active</th><th id="sActCol"></th></tr></thead>
+                <tbody id="shiftsBody"><tr><td colspan="7"><div class="loading-state"><span class="spinner"></span></div></td></tr></tbody>
+                <tfoot id="shiftsFoot"></tfoot>
+              </table>
+            </div>
+            <div class="inline-add" id="sAddRow" style="display:none">
+              <input class="form-control" id="newShiftName" placeholder="Name (e.g. Hour 3)" style="width:140px"/>
+              <input type="time" class="form-control" id="newShiftStart" style="width:120px"/>
+              <input type="time" class="form-control" id="newShiftEnd" style="width:120px"/>
+              <button class="btn btn-orange btn-sm" onclick="addShift()">+ Add</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><div class="card-title">Shift Summary</div></div>
+            <div class="card-body" id="shiftSummary" style="display:flex;flex-direction:column;gap:10px"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================== TAB: TARGETS PER MANPOWER ===================== -->
+      <div class="tab-panel" id="tab-targets">
+        <div class="filter-bar" style="margin-bottom:16px">
+          <select class="form-control" id="tFilterLine" style="width:160px" onchange="loadTargetsTab()">
+            <option value="">All Lines</option>
+          </select>
+          <span style="font-size:0.82rem;color:var(--text-muted)">Targets calculated from product master data. Edit product fields to update.</span>
+        </div>
+        <div class="target-grid" id="targetGrid">
+          <div class="loading-state"><span class="spinner"></span></div>
+        </div>
+      </div>
+
+    </div><!-- end page-content -->
+
+    <!-- Sticky save bar for products -->
+    <div class="save-bar" id="savebar">
+      <span class="save-bar-msg">⚠ You have unsaved changes in the product table</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" style="color:white;border-color:rgba(255,255,255,0.3)" onclick="discardChanges()">Discard</button>
+        <button class="btn btn-orange" onclick="saveAllDirty()">Save All Changes</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="../assets/js/config.js"></script>
+<script src="../assets/js/layout.js"></script>
+<script>
+Auth.requireAuth(['admin','operator','viewer']);
+buildLayout('overview');
+
+const user = Auth.getUser();
+const isAdmin = user.role === 'admin';
+
+let allLines = [], allModels = [], allProducts = [];
+let dirtyRows = {}; // productId -> {field: value}
+let currentTab = 'products';
+
+// ============================================================
+// TAB SWITCHING
+// ============================================================
+function switchTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  document.querySelectorAll('.tab-nav-btn')[['products','lines','shifts','targets'].indexOf(name)].classList.add('active');
+  currentTab = name;
+
+  if (name === 'products') loadProductTab();
+  if (name === 'lines')    { loadLinesTab(); loadModelsTab(); }
+  if (name === 'shifts')   loadShiftsTab();
+  if (name === 'targets')  loadTargetsTab();
+}
+
+// ============================================================
+// INIT
+// ============================================================
+async function init() {
+  [allLines, allModels] = await Promise.all([
+    API.get('/api/master/lines'),
+    API.get('/api/master/models'),
+  ]);
+
+  // Populate all line selects
+  ['pFilterLine','mFilterLine','tFilterLine','paLine','newModelLine'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    allLines.forEach(l => sel.add(new Option(l.name, l.id)));
+  });
+
+  // Show add rows and action cols only for admin
+  if (isAdmin) {
+    ['pAddRow','lAddRow','mAddRow','sAddRow'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'flex';
+    });
+    ['pActCol','lActCol','mActCol','sActCol'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = 'Actions';
+    });
+    document.getElementById('topbarActions').innerHTML = `<span style="font-size:0.8rem;color:var(--text-muted)">Admin — all fields editable</span>`;
+  } else {
+    document.getElementById('topbarActions').innerHTML = `<span class="badge badge-blue">Read Only</span>`;
+  }
+
+  loadProductTab();
+}
+
+// ============================================================
+// PRODUCTS TAB
+// ============================================================
+async function onPFilterLine() {
+  const lineId = document.getElementById('pFilterLine').value;
+  const mSel = document.getElementById('pFilterModel');
+  mSel.innerHTML = '<option value="">All Models</option>';
+  allModels.filter(m => !lineId || m.line_id === lineId)
+    .forEach(m => mSel.add(new Option(m.name, m.id)));
+  loadProductTab();
+}
+
+async function loadProductTab() {
+  const lineId  = document.getElementById('pFilterLine').value;
+  const modelId = document.getElementById('pFilterModel').value;
+  const search  = document.getElementById('pSearch').value.toLowerCase();
+
+  let q = '?';
+  if (modelId) q += `model_id=${modelId}`;
+  else if (lineId) q += `line_id=${lineId}`;
+
+  allProducts = await API.get('/api/master/products' + q);
+  let filtered = allProducts;
+  if (search) filtered = filtered.filter(p =>
+    (p.product_id||'').toLowerCase().includes(search) ||
+    (p.description||'').toLowerCase().includes(search)
+  );
+
+  document.getElementById('pCount').textContent = `${filtered.length} products`;
+  renderProductTable(filtered);
+}
+
+function getLineName(modelId) {
+  const m = allModels.find(x => x.id === modelId);
+  if (!m) return '—';
+  const l = allLines.find(x => x.id === m.line_id);
+  return l ? l.name : '—';
+}
+function getModelName(modelId) {
+  const m = allModels.find(x => x.id === modelId);
+  return m ? m.name : '—';
+}
+
+function renderProductTable(data) {
+  if (!data.length) {
+    document.getElementById('productBody').innerHTML = '<tr><td colspan="18"><div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-title">No products found</div></div></td></tr>';
+    return;
+  }
+
+  function eNum(val, field, id) {
+    if (!isAdmin) return `<td class="num read-only">${fmtNum(val)}</td>`;
+    return `<td class="editable num" onclick="makeEdit(this,'${field}','${id}','number')">${fmtNum(val)}</td>`;
+  }
+  function eTxt(val, field, id) {
+    if (!isAdmin) return `<td class="read-only">${val||''}</td>`;
+    return `<td class="editable" onclick="makeEdit(this,'${field}','${id}','text')">${val||''}</td>`;
+  }
+
+  document.getElementById('productBody').innerHTML = data.map((p, i) => `
+    <tr id="prow-${p.id}" class="${dirtyRows[p.id] ? 'dirty' : ''}">
+      <td>${i+1}</td>
+      ${eTxt(p.product_id,'product_id',p.id)}
+      ${eTxt(p.description,'description',p.id)}
+      <td class="read-only">${getLineName(p.model_id)}</td>
+      <td class="read-only">${getModelName(p.model_id)}</td>
+      <td ${isAdmin ? `class="editable" onclick="makeSelectEdit(this,'product_type','${p.id}',['','type1','type2','type3'],'${p.product_type||''}')"` : ''}>
+        ${p.product_type ? `<span class="badge badge-blue">${p.product_type}</span>` : '<span class="read-only">—</span>'}
+      </td>
+      ${eNum(p.hourly_rate,'hourly_rate',p.id)}
+      ${eNum(p.eq_factor,'eq_factor',p.id)}
+      <td ${isAdmin ? `class="editable num" onclick="makeEdit(this,'no_of_persons','${p.id}','number')"` : 'class="num read-only"'}>${p.no_of_persons}</td>
+      ${eNum(p.pitch_time,'pitch_time',p.id)}
+      ${eNum(p.te_time,'te_time',p.id)}
+      ${eNum(p.man_time,'man_time',p.id)}
+      ${eNum(p.machine_time,'machine_time',p.id)}
+      <td ${isAdmin ? `class="editable num" onclick="makeEdit(this,'handling_unit','${p.id}','number')"` : 'class="num read-only"'}>${p.handling_unit}</td>
+      ${eNum(p.cycle_time,'cycle_time',p.id)}
+      ${eNum(p.cost,'cost',p.id)}
+      <td>
+        ${isAdmin
+          ? `<input type="checkbox" ${p.is_active?'checked':''} onchange="toggleProduct('${p.id}',this.checked)"/>`
+          : `<span class="badge ${p.is_active?'badge-green':'badge-red'}">${p.is_active?'Yes':'No'}</span>`}
+      </td>
+      <td>
+        ${isAdmin ? `
+          <div style="display:flex;gap:4px">
+            <button class="btn btn-danger btn-sm" onclick="deleteProduct('${p.id}')">Del</button>
+            ${dirtyRows[p.id] ? `<button class="btn btn-primary btn-sm" onclick="saveRow('${p.id}')">Save</button>` : ''}
+          </div>` : ''}
+      </td>
+    </tr>`).join('');
+}
+
+function makeEdit(td, field, id, type) {
+  if (!isAdmin || td.querySelector('input')) return;
+  const cur = td.textContent.trim();
+  const inp = document.createElement('input');
+  inp.type = type; inp.value = cur;
+  td.innerHTML = ''; td.appendChild(inp); inp.focus();
+  inp.addEventListener('blur', () => {
+    const val = type === 'number' ? parseFloat(inp.value)||0 : inp.value;
+    td.textContent = type === 'number' ? fmtNum(val) : val;
+    if (!dirtyRows[id]) dirtyRows[id] = {};
+    dirtyRows[id][field] = val;
+    document.getElementById('prow-' + id)?.classList.add('dirty');
+    document.getElementById('savebar').classList.add('show');
+  });
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
+}
+
+function makeSelectEdit(td, field, id, options, cur) {
+  if (!isAdmin || td.querySelector('select')) return;
+  const sel = document.createElement('select');
+  options.forEach(o => sel.add(new Option(o||'—', o)));
+  sel.value = cur; td.innerHTML = ''; td.appendChild(sel); sel.focus();
+  sel.addEventListener('change', () => {
+    if (!dirtyRows[id]) dirtyRows[id] = {};
+    dirtyRows[id][field] = sel.value;
+    document.getElementById('prow-' + id)?.classList.add('dirty');
+    document.getElementById('savebar').classList.add('show');
+  });
+  sel.addEventListener('blur', () => { td.textContent = sel.value || '—'; });
+}
+
+async function saveRow(id) {
+  if (!dirtyRows[id]) return;
+  try {
+    await API.put(`/api/master/products/${id}`, dirtyRows[id]);
+    delete dirtyRows[id];
+    document.getElementById('prow-' + id)?.classList.remove('dirty');
+    if (!Object.keys(dirtyRows).length) document.getElementById('savebar').classList.remove('show');
+    showToast('Saved', 'success');
+    loadProductTab();
+  } catch (e) { showToast(e.message || 'Save failed', 'error'); }
+}
+
+async function saveAllDirty() {
+  const ids = Object.keys(dirtyRows);
+  if (!ids.length) return;
+  try {
+    await Promise.all(ids.map(id => API.put(`/api/master/products/${id}`, dirtyRows[id])));
+    dirtyRows = {};
+    document.getElementById('savebar').classList.remove('show');
+    showToast(`${ids.length} product(s) saved`, 'success');
+    loadProductTab();
+  } catch (e) { showToast('Save failed', 'error'); }
+}
+
+function discardChanges() {
+  dirtyRows = {};
+  document.getElementById('savebar').classList.remove('show');
+  loadProductTab();
+}
+
+async function toggleProduct(id, val) {
+  await API.put(`/api/master/products/${id}`, { is_active: val });
+  showToast('Updated', 'success');
+}
+
+async function deleteProduct(id) {
+  if (!confirm('Delete this product?')) return;
+  try { await API.delete(`/api/master/products/${id}`); showToast('Deleted', 'success'); loadProductTab(); }
+  catch (e) { showToast(e.message, 'error'); }
+}
+
+async function loadPaModels() {
+  const lineId = document.getElementById('paLine').value;
+  const sel = document.getElementById('paModel');
+  sel.innerHTML = '<option value="">Model...</option>';
+  sel.disabled = !lineId;
+  allModels.filter(m => m.line_id === lineId).forEach(m => sel.add(new Option(m.name, m.id)));
+  sel.disabled = false;
+}
+
+async function addProduct() {
+  const modelId = document.getElementById('paModel').value;
+  const productId = document.getElementById('paId').value.trim();
+  if (!modelId || !productId) { showToast('Line, Model and Product ID required', 'error'); return; }
+  try {
+    await API.post('/api/master/products', {
+      model_id: modelId, product_id: productId,
+      description: document.getElementById('paDesc').value,
+      hourly_rate: parseFloat(document.getElementById('paHR').value)||0,
+      no_of_persons: parseInt(document.getElementById('paPersons').value)||1,
+      cycle_time: parseFloat(document.getElementById('paCT').value)||0,
+      cost: parseFloat(document.getElementById('paCost').value)||0,
+      eq_factor: 1.25, pitch_time: 1.84, te_time: 18.42, man_time: 18.42,
+      machine_time: 0, handling_unit: 12,
+    });
+    ['paId','paDesc','paHR','paPersons','paCT','paCost'].forEach(id => document.getElementById(id).value = '');
+    showToast('Product added', 'success'); loadProductTab();
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+// ============================================================
+// LINES TAB
+// ============================================================
+async function loadLinesTab() {
+  allLines = await API.get('/api/master/lines');
+  document.getElementById('lineCount').textContent = `${allLines.length} lines`;
+  document.getElementById('linesBody').innerHTML = allLines.length ? allLines.map((l, i) => `
+    <tr>
+      <td>${i+1}</td>
+      <td ${isAdmin ? `class="editable" onclick="inlineEdit(this,'/api/master/lines/${l.id}','name')"` : ''}>${l.name}</td>
+      <td>${isAdmin
+        ? `<input type="checkbox" ${l.is_active?'checked':''} onchange="quickToggle('/api/master/lines/${l.id}','is_active',this.checked)"/>`
+        : `<span class="badge ${l.is_active?'badge-green':'badge-red'}">${l.is_active?'Yes':'No'}</span>`}
+      </td>
+      <td>${isAdmin ? `<button class="btn btn-danger btn-sm" onclick="deleteLine('${l.id}')">Del</button>` : ''}</td>
+    </tr>`).join('') :
+    '<tr><td colspan="4"><div class="empty-state"><div class="empty-state-icon">🏭</div><div>No lines</div></div></td></tr>';
+}
+
+async function loadModelsTab() {
+  const lineId = document.getElementById('mFilterLine').value;
+  const models = await API.get('/api/master/models' + (lineId ? `?line_id=${lineId}` : ''));
+  document.getElementById('modelsBody').innerHTML = models.length ? models.map((m, i) => {
+    const line = allLines.find(l => l.id === m.line_id);
+    return `<tr>
+      <td>${i+1}</td>
+      <td ${isAdmin ? `class="editable" onclick="inlineEdit(this,'/api/master/models/${m.id}','name')"` : ''}>${m.name}</td>
+      <td class="read-only">${line ? line.name : '—'}</td>
+      <td>${isAdmin
+        ? `<input type="checkbox" ${m.is_active?'checked':''} onchange="quickToggle('/api/master/models/${m.id}','is_active',this.checked)"/>`
+        : `<span class="badge ${m.is_active?'badge-green':'badge-red'}">${m.is_active?'Yes':'No'}</span>`}
+      </td>
+      <td>${isAdmin ? `<button class="btn btn-danger btn-sm" onclick="deleteModel('${m.id}')">Del</button>` : ''}</td>
+    </tr>`;
+  }).join('') :
+  '<tr><td colspan="5"><div class="empty-state"><div class="empty-state-icon">📋</div><div>No models</div></div></td></tr>';
+}
+
+async function addLine() {
+  const name = document.getElementById('newLineName').value.trim();
+  if (!name) { showToast('Enter line name', 'error'); return; }
+  await API.post('/api/master/lines', { name });
+  document.getElementById('newLineName').value = '';
+  showToast('Line added', 'success'); loadLinesTab();
+}
+
+async function addModel() {
+  const lineId = document.getElementById('newModelLine').value;
+  const name = document.getElementById('newModelName').value.trim();
+  if (!lineId || !name) { showToast('Select line and enter model name', 'error'); return; }
+  await API.post('/api/master/models', { line_id: lineId, name });
+  document.getElementById('newModelName').value = '';
+  showToast('Model added', 'success'); loadModelsTab();
+}
+
+async function deleteLine(id) {
+  if (!confirm('Delete line? All models under it will also be removed.')) return;
+  await API.delete(`/api/master/lines/${id}`); showToast('Deleted', 'success'); loadLinesTab(); loadModelsTab();
+}
+async function deleteModel(id) {
+  if (!confirm('Delete model?')) return;
+  await API.delete(`/api/master/models/${id}`); showToast('Deleted', 'success'); loadModelsTab();
+}
+
+// ============================================================
+// SHIFTS TAB
+// ============================================================
+async function loadShiftsTab() {
+  const shifts = await API.get('/api/master/shifts');
+  document.getElementById('shiftCount').textContent = `${shifts.length} shifts`;
+
+  function timeDiff(s, e) {
+    const [sh, sm] = s.split(':').map(Number);
+    const [eh, em] = e.split(':').map(Number);
+    const diff = (eh * 60 + em) - (sh * 60 + sm);
+    return diff > 0 ? diff + ' min' : '—';
+  }
+
+  document.getElementById('shiftsBody').innerHTML = shifts.length ? shifts.map((s, i) => `
+    <tr>
+      <td>${i+1}</td>
+      <td ${isAdmin ? `class="editable" onclick="inlineEdit(this,'/api/master/shifts/${s.id}','name')"` : ''}>${s.name}</td>
+      <td><span style="font-family:var(--font-mono);font-size:0.82rem;background:rgba(0,62,107,0.07);padding:2px 7px;border-radius:4px;color:var(--mahle-blue)">${s.start_time}</span></td>
+      <td><span style="font-family:var(--font-mono);font-size:0.82rem;background:rgba(0,62,107,0.07);padding:2px 7px;border-radius:4px;color:var(--mahle-blue)">${s.end_time}</span></td>
+      <td class="num">${timeDiff(s.start_time, s.end_time)}</td>
+      <td>${isAdmin
+        ? `<input type="checkbox" ${s.is_active?'checked':''} onchange="quickToggle('/api/master/shifts/${s.id}','is_active',this.checked)"/>`
+        : `<span class="badge ${s.is_active?'badge-green':'badge-red'}">${s.is_active?'Yes':'No'}</span>`}
+      </td>
+      <td>${isAdmin ? `<button class="btn btn-danger btn-sm" onclick="deleteShift('${s.id}')">Del</button>` : ''}</td>
+    </tr>`).join('') :
+    '<tr><td colspan="7"><div class="empty-state"><div class="empty-state-icon">🕐</div><div>No shifts</div></div></td></tr>';
+
+  // Summary card
+  const activeShifts = shifts.filter(s => s.is_active);
+  document.getElementById('shiftSummary').innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:8px">
+      ${activeShifts.map(s => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--bg);border-radius:var(--radius);border:1px solid var(--border)">
+          <span style="font-weight:600;font-size:0.875rem">${s.name}</span>
+          <span style="font-family:var(--font-mono);font-size:0.78rem;color:var(--text-secondary)">${s.start_time} – ${s.end_time}</span>
+        </div>`).join('')}
+      <div style="padding:10px 12px;background:rgba(232,119,34,0.08);border-radius:var(--radius);border:1px solid rgba(232,119,34,0.2);font-size:0.82rem;color:var(--mahle-orange);font-weight:600;text-align:center">
+        ${activeShifts.length} active shifts configured
+      </div>
+    </div>`;
+}
+
+async function addShift() {
+  const name  = document.getElementById('newShiftName').value.trim();
+  const start = document.getElementById('newShiftStart').value;
+  const end   = document.getElementById('newShiftEnd').value;
+  if (!name || !start || !end) { showToast('All shift fields required', 'error'); return; }
+  await API.post('/api/master/shifts', { name, start_time: start, end_time: end });
+  ['newShiftName','newShiftStart','newShiftEnd'].forEach(id => document.getElementById(id).value = '');
+  showToast('Shift added', 'success'); loadShiftsTab();
+}
+
+async function deleteShift(id) {
+  if (!confirm('Delete shift?')) return;
+  await API.delete(`/api/master/shifts/${id}`); showToast('Deleted', 'success'); loadShiftsTab();
+}
+
+// ============================================================
+// TARGETS TAB
+// ============================================================
+async function loadTargetsTab() {
+  const lineId = document.getElementById('tFilterLine').value;
+  let q = lineId ? `?line_id=${lineId}` : '';
+  const products = await API.get('/api/master/products' + q);
+
+  // Group by line
+  const grouped = {};
+  products.forEach(p => {
+    const lineName = getLineName(p.model_id);
+    const modelName = getModelName(p.model_id);
+    const key = lineName;
+    if (!grouped[key]) grouped[key] = { lineName, products: [] };
+    grouped[key].products.push({ ...p, modelName });
+  });
+
+  const grid = document.getElementById('targetGrid');
+  if (!Object.keys(grouped).length) {
+    grid.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🎯</div><div class="empty-state-title">No product data found</div></div>';
+    return;
+  }
+
+  grid.innerHTML = Object.values(grouped).map(group => `
+    <div class="target-card">
+      <div class="target-card-head">
+        <div class="target-card-title">${group.lineName}</div>
+        <span style="font-size:0.72rem;color:rgba(255,255,255,0.5)">${group.products.length} products</span>
+      </div>
+      <div class="target-card-body">
+        ${group.products.map(p => {
+          // Target per manpower = hourly_rate / no_of_persons
+          const tpm = p.no_of_persons ? (p.hourly_rate / p.no_of_persons).toFixed(2) : '—';
+          const cycleOk = p.cycle_time > 0;
+          return `
+            <div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+              <div style="background:rgba(0,62,107,0.04);padding:7px 10px;font-size:0.78rem;font-weight:700;color:var(--mahle-blue);border-bottom:1px solid var(--border)">
+                ${p.product_id} — <span style="font-weight:400;color:var(--text-secondary)">${p.description||''}</span>
+              </div>
+              <div style="padding:8px 10px;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                <div class="target-row">
+                  <span class="target-label">Hourly Rate</span>
+                  <span class="target-val">${p.hourly_rate}</span>
+                </div>
+                <div class="target-row">
+                  <span class="target-label">Persons</span>
+                  <span class="target-val">${p.no_of_persons}</span>
+                </div>
+                <div class="target-row">
+                  <span class="target-label">Target/Person/Hr</span>
+                  <span class="target-val" style="color:var(--mahle-orange)">${tpm}</span>
+                </div>
+                <div class="target-row">
+                  <span class="target-label">Cycle Time</span>
+                  <span class="target-val" style="color:${cycleOk?'var(--green)':'var(--red)'}">${cycleOk ? p.cycle_time+'s' : 'Not set'}</span>
+                </div>
+                <div class="target-row" style="grid-column:1/-1">
+                  <span class="target-label">EQ Factor × Pitch</span>
+                  <span class="target-val">${p.eq_factor} × ${p.pitch_time}</span>
+                </div>
+              </div>
+            </div>`;
+        }).join('')}
+      </div>
+    </div>`).join('');
+}
+
+// ============================================================
+// SHARED HELPERS
+// ============================================================
+function inlineEdit(td, apiPath, field) {
+  if (!isAdmin || td.querySelector('input')) return;
+  const cur = td.textContent.trim();
+  const inp = document.createElement('input');
+  inp.value = cur; inp.className = 'form-control';
+  td.innerHTML = ''; td.appendChild(inp); inp.focus();
+  inp.addEventListener('blur', async () => {
+    const val = inp.value.trim() || cur;
+    td.textContent = val;
+    if (val !== cur) {
+      try { await API.put(apiPath, { [field]: val }); showToast('Updated', 'success'); }
+      catch (e) { showToast('Failed', 'error'); td.textContent = cur; }
+    }
+  });
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
+}
+
+async function quickToggle(apiPath, field, val) {
+  await API.put(apiPath, { [field]: val });
+  showToast('Updated', 'success');
+}
+
+init();
+</script>
+</body>
+</html>
