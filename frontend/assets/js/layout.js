@@ -69,12 +69,9 @@ function buildLayout(activePage) {
   const sidebarHTML = `
     <aside class="sidebar" id="sidebar">
       <a class="sidebar-logo" href="/dashboard.html">
-        <div class="logo-mark">
-          <img src="mahle.png" alt="Company Logo" style="width:28px;height:28px;object-fit:contain;">
-        </div>
-        <div class="logo-text">
-          <div class="logo-name">MAHLE</div>
-          <div class="logo-sub">Sanand MIS</div>
+        <div class="logo-block">
+          <img src="mahle.png" alt="Company Logo" class="logo-img">
+          <div class="logo-sub">Production System</div>
         </div>
       </a>
       <nav class="sidebar-nav">${navHTML}</nav>
