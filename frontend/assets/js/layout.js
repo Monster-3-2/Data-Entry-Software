@@ -70,7 +70,7 @@ function buildLayout(activePage) {
     <aside class="sidebar" id="sidebar">
       <a class="sidebar-logo" href="/dashboard.html">
         <div class="logo-block">
-          <img src="mahle.png" alt="Company Logo" class="logo-img">
+          <img src="Data-Entry-Software/mahle.png" alt="Company Logo" class="logo-img">
           <div class="logo-sub">Production System</div>
         </div>
       </a>
