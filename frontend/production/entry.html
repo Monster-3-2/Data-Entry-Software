@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Production Entry — MAHLE</title>
+  <link rel="stylesheet" href="../assets/css/main.css"/>
+  <style>
+    .app-layout { display: flex; min-height: 100vh; }
+    .main-content { margin-left: var(--sidebar-width); flex: 1; display: flex; flex-direction: column; }
+
+    /* ── Split layout: entry left, live history right ── */
+    .entry-history-layout {
+      display: grid;
+      grid-template-columns: 1fr 400px;
+      gap: 20px;
+      align-items: start;
+    }
+    .history-col {
+      position: sticky;
+      top: 20px;
+      max-height: calc(100vh - 100px);
+      overflow-y: auto;
+    }
+
+    .step-bar { display:flex; align-items:center; margin-bottom:28px; gap:0; }
+    .step { display:flex; align-items:center; gap:8px; font-size:0.8rem; font-weight:600; color:var(--text-muted); }
+    .step-num { width:26px; height:26px; border-radius:50%; background:var(--border); color:var(--text-muted); display:flex; align-items:center; justify-content:center; font-size:0.75rem; font-weight:700; flex-shrink:0; transition:all var(--transition); }
+    .step.active .step-num { background:var(--mahle-blue-light); color:white; }
+    .step.active { color:var(--mahle-blue); }
+    .step.done .step-num { background:var(--green); color:white; }
+    .step.done { color:var(--green); }
+    .step-line { flex:1; height:2px; background:var(--border); margin:0 8px; transition:background var(--transition); }
+    .step-line.done { background:var(--green); }
+
+    .section-panel { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; margin-bottom:16px; }
+    .section-panel-header { background:var(--mahle-blue); padding:14px 20px; display:flex; align-items:center; gap:10px; }
+    .section-panel-title { font-family:var(--font-condensed); font-weight:700; font-size:0.95rem; color:white; letter-spacing:0.04em; }
+    .section-panel-num { width:22px; height:22px; border-radius:50%; background:var(--mahle-orange); display:flex; align-items:center; justify-content:center; font-size:0.7rem; font-weight:700; color:white; flex-shrink:0; }
+    .section-panel-body { padding:20px; }
+
+    .status-indicator { display:flex; align-items:center; gap:10px; padding:12px 16px; border-radius:var(--radius); font-weight:600; font-size:0.9rem; margin-bottom:16px; }
+    .status-above { background:var(--green-bg); color:var(--green); border:1px solid #6ee7b7; }
+    .status-below { background:var(--red-bg); color:var(--red); border:1px solid #fca5a5; }
+
+    .downtime-list { display:flex; flex-direction:column; gap:10px; }
+    .downtime-row { display:grid; grid-template-columns:1fr 120px auto; gap:10px; align-items:center; background:var(--bg); padding:10px 14px; border-radius:var(--radius); border:1px solid var(--border); }
+
+    .btn-add-row { border:2px dashed var(--border); background:transparent; color:var(--text-muted); width:100%; padding:10px; border-radius:var(--radius); cursor:pointer; font-size:0.85rem; font-weight:600; transition:all var(--transition); display:flex; align-items:center; justify-content:center; gap:6px; }
+    .btn-add-row:hover { border-color:var(--mahle-blue-light); color:var(--mahle-blue-light); background:rgba(0,119,204,0.04); }
+
+    .form-actions { display:flex; align-items:center; justify-content:flex-end; gap:10px; margin-top:20px; }
+
+    .calc-preview { background:linear-gradient(135deg,var(--mahle-blue) 0%,var(--mahle-blue-mid) 100%); border-radius:var(--radius-lg); padding:16px 20px; color:white; display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:16px; }
+    .calc-item { text-align:center; }
+    .calc-val { font-family:var(--font-condensed); font-size:1.5rem; font-weight:700; }
+    .calc-label { font-size:0.7rem; color:rgba(255,255,255,0.6); text-transform:uppercase; letter-spacing:0.06em; }
+
+    /* Duplicate warning banner */
+    .dup-warning { display:none; align-items:center; gap:10px; padding:11px 16px; background:#fff7ed; border:1px solid #fdba74; color:#c2410c; border-radius:var(--radius); font-size:0.85rem; font-weight:600; margin-bottom:14px; }
+    .dup-warning.show { display:flex; }
+
+    /* Auto-default badge */
+    .auto-badge { font-size:0.68rem; background:rgba(0,62,107,0.09); color:var(--mahle-blue); padding:1px 6px; border-radius:10px; font-weight:600; margin-left:5px; vertical-align:middle; }
+
+    /* Live history panel */
+    .hist-panel-header { padding:12px 16px 10px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+    .hist-panel-title { font-family:var(--font-condensed); font-weight:700; font-size:0.95rem; color:var(--mahle-blue); }
+    .hist-row { padding:10px 16px; border-bottom:1px solid var(--border); font-size:0.82rem; }
+    .hist-row:last-child { border-bottom:none; }
+    .hist-row-top { display:flex; justify-content:space-between; align-items:center; font-weight:600; }
+    .hist-row-sub { color:var(--text-muted); font-size:0.76rem; margin-top:2px; }
+    .hist-empty { padding:24px 16px; text-align:center; color:var(--text-muted); font-size:0.85rem; }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-title">Production Data Entry</div>
+    </div>
+    <div class="page-content">
+      <div class="entry-history-layout">
+
+        <!-- ── LEFT: Entry form ── -->
+        <div>
+          <!-- Step bar -->
+          <div class="step-bar">
+            <div class="step active" id="step1"><div class="step-num">1</div><span>Line & Model</span></div>
+            <div class="step-line" id="line12"></div>
+            <div class="step" id="step2"><div class="step-num">2</div><span>Date & Shift</span></div>
+            <div class="step-line" id="line23"></div>
+            <div class="step" id="step3"><div class="step-num">3</div><span>Output & Manpower</span></div>
+            <div class="step-line" id="line34"></div>
+            <div class="step" id="step4"><div class="step-num">4</div><span>Downtime</span></div>
+          </div>
+
+          <!-- Duplicate warning -->
+          <div class="dup-warning" id="dupWarn">
+            ⚠ This line already has an entry for this shift on this date. One line runs one model per hour.
+          </div>
+
+          <!-- SECTION 1 -->
+          <div class="section-panel">
+            <div class="section-panel-header">
+              <div class="section-panel-num">1</div>
+              <div class="section-panel-title">Line, Model & Session</div>
+            </div>
+            <div class="section-panel-body">
+              <div class="form-row form-row-2">
+                <div class="form-group">
+                  <label class="form-label">Production Line *</label>
+                  <select class="form-control" id="lineSelect" onchange="onLineChange()">
+                    <option value="">— Select Line —</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Model *</label>
+                  <select class="form-control" id="modelSelect" onchange="onModelChange()" disabled>
+                    <option value="">— Select Model —</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">
+                    Date *
+                    <span class="auto-badge" id="dateBadge" style="display:none">session default</span>
+                  </label>
+                  <input type="date" class="form-control" id="entryDate" onchange="onDateChange()"/>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">
+                    Shift / Hour *
+                    <span class="auto-badge" id="shiftBadge" style="display:none">auto-active</span>
+                  </label>
+                  <select class="form-control" id="shiftSelect" onchange="onShiftChange()">
+                    <option value="">— Select Shift —</option>
+                  </select>
+                </div>
+              </div>
+              <!-- Product rate info (shown after model selected) -->
+              <div id="productRateInfo" style="display:none;margin-top:4px">
+                <div style="font-size:0.78rem;color:var(--text-muted);font-weight:600;padding:6px 10px;background:rgba(0,62,107,0.05);border-radius:6px;border:1px solid var(--border)">
+                  <span id="productRateLabel"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SECTION 2 -->
+          <div class="section-panel">
+            <div class="section-panel-header">
+              <div class="section-panel-num">2</div>
+              <div class="section-panel-title">Manpower & Hours</div>
+            </div>
+            <div class="section-panel-body">
+              <div class="form-row form-row-2">
+                <div class="form-group">
+                  <label class="form-label">
+                    Hours Worked *
+                    <span class="auto-badge" id="hoursBadge" style="display:none">from shift</span>
+                  </label>
+                  <input type="number" class="form-control" id="hoursWorked" value="8" min="0.5" max="24" step="0.5" oninput="recalc(); recalcTargetFromHours()"/>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Manpower (persons) *</label>
+                  <input type="number" class="form-control" id="manpower" min="1" placeholder="e.g. 10" oninput="this.dataset.userSet='1'; recalc(); recalcTargetFromManpower()"/>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SECTION 3 -->
+          <div class="section-panel">
+            <div class="section-panel-header">
+              <div class="section-panel-num">3</div>
+              <div class="section-panel-title">Production Target & Output</div>
+            </div>
+            <div class="section-panel-body">
+              <div class="form-row form-row-2">
+                <div class="form-group">
+                  <label class="form-label">Target (units) *</label>
+                  <input type="number" class="form-control" id="target" min="0" placeholder="Enter target" oninput="recalc()"/>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Actual Output (units) *</label>
+                  <input type="number" class="form-control" id="output" min="0" placeholder="Enter output" oninput="recalc()"/>
+                </div>
+              </div>
+              <div class="calc-preview" id="calcPreview" style="display:none">
+                <div class="calc-item"><div class="calc-val" id="calcEff">—</div><div class="calc-label">Efficiency %</div></div>
+                <div class="calc-item"><div class="calc-val" id="calcUPMD">—</div><div class="calc-label">Units / Person<span style="font-size:0.6rem;opacity:0.7;display:block">output ÷ manpower</span></div></div>
+                <div class="calc-item"><div class="calc-val" id="calcGap">—</div><div class="calc-label">Gap (units)</div></div>
+              </div>
+              <div id="statusIndicator" style="display:none"></div>
+            </div>
+          </div>
+
+          <!-- SECTION 4 -->
+          <div class="section-panel" id="downtimeSection" style="display:none">
+            <div class="section-panel-header">
+              <div class="section-panel-num">4</div>
+              <div class="section-panel-title">Downtime Entry — Required (Output &lt; Target)</div>
+            </div>
+            <div class="section-panel-body">
+              <div class="downtime-list" id="downtimeList"></div>
+              <button class="btn-add-row" style="margin-top:10px" onclick="addDowntimeRow()">+ Add Downtime Reason</button>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button class="btn btn-ghost" onclick="resetDataFields()">Clear</button>
+            <button class="btn btn-orange btn-lg" id="submitBtn" onclick="submitEntry()">Save Production Entry →</button>
+          </div>
+        </div>
+
+        <!-- ── RIGHT: Live history panel ── -->
+        <div class="history-col">
+          <div class="card" style="padding:0">
+            <div class="hist-panel-header">
+              <span class="hist-panel-title">Entries for this date</span>
+              <span id="histCount" style="font-size:0.78rem;color:var(--text-muted)"></span>
+            </div>
+            <div id="histBody"><div class="hist-empty">Select a date to see entries</div></div>
+          </div>
+        </div>
+
+      </div><!-- /entry-history-layout -->
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/config.js"></script>
+<script src="../assets/js/layout.js"></script>
+<script>
+  Auth.requireAuth(['admin','product_lead','operator']);
+  buildLayout('entry');
+
+  // Lock target immediately for operator role (before async init completes)
+  (function lockTargetForOperator() {
+    const user = Auth.getUser();
+    if (!user || user.role !== 'operator') return;
+    const tEl = document.getElementById('target');
+    if (!tEl) return;
+    tEl.readOnly = true;
+    tEl.placeholder = 'Auto-calculated from product master';
+    tEl.title    = 'Target is set automatically from product master';
+    tEl.style.background = 'var(--bg)';
+    tEl.style.color      = 'var(--text-muted)';
+    tEl.style.cursor     = 'not-allowed';
+    // Update the label to make it clear
+    const label = tEl.closest('.form-group')?.querySelector('.form-label');
+    if (label) label.innerHTML = 'Target (units) <span style="font-size:0.7rem;color:var(--mahle-orange);font-weight:700">AUTO</span>';
+  })();
+
+  let reasons = [];
+  let allShifts = [];
+
+  // ── Session defaults (persist across entries within the same session) ──
+  // Date persisted across all pages via DateState (sessionStorage)
+  let sessionShift = '';   // set once user picks a shift
+
+  // Bind entryDate to DateState — reads persisted date, writes back on change
+  // onDateChange() is called manually after binding so we hook our own handler too
+  const _dateEl = document.getElementById('entryDate');
+  _dateEl.value = DateState.getDate();
+  _dateEl.addEventListener('change', () => { DateState.setDate(_dateEl.value); });
+
+  // ──────────────────────────────────────────────────────
+  async function init() {
+    const [lines, shifts, reasonsData] = await Promise.all([
+      API.get('/api/master/lines'),
+      API.get('/api/master/shifts'),
+      API.get('/api/master/reasons'),
+    ]);
+    reasons    = reasonsData;
+    allShifts  = shifts;
+
+    lines.forEach(l => document.getElementById('lineSelect').add(new Option(l.name, l.id)));
+    shifts.forEach(s => document.getElementById('shiftSelect').add(new Option(`${s.name} (${s.start_time}–${s.end_time})`, s.id)));
+
+    autoSelectActiveShift();
+    loadHistPanel();
+    applyRoleRestrictions();
+  }
+
+  function applyRoleRestrictions() {
+    const user = Auth.getUser();
+    if (user.role === 'operator') {
+      const tEl = document.getElementById('target');
+      tEl.readOnly = true;
+      tEl.placeholder = 'Auto-calculated from product master';
+      tEl.title    = 'Target is set automatically from product master';
+      tEl.style.background = 'var(--bg)';
+      tEl.style.color      = 'var(--text-muted)';
+      tEl.style.cursor     = 'not-allowed';
+      let note = document.getElementById('targetReadNote');
+      if (!note) {
+        note = document.createElement('div');
+        note.id = 'targetReadNote';
+        note.style.cssText = 'font-size:0.72rem;color:var(--text-muted);margin-top:3px';
+        note.innerHTML = '🔒 Auto-set from product master — select model &amp; enter manpower';
+        tEl.parentElement.appendChild(note);
+      }
+    } else {
+      // Admin/product_lead: target is editable, show hint
+      const tEl = document.getElementById('target');
+      tEl.readOnly = false;
+      tEl.placeholder = 'Enter target or auto-fill by entering manpower';
+      tEl.style.background = '';
+      tEl.style.color = '';
+      tEl.style.cursor = '';
+    }
+  }
+
+  // ── Auto-select the currently active shift based on clock time ──
+  function autoSelectActiveShift() {
+    const now  = new Date();
+    const hhmm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    const active = allShifts.find(s => {
+      // Handle overnight shifts (end < start)
+      if (s.start_time <= s.end_time) return hhmm >= s.start_time && hhmm < s.end_time;
+      return hhmm >= s.start_time || hhmm < s.end_time;
+    });
+    if (active) {
+      document.getElementById('shiftSelect').value = active.id;
+      document.getElementById('shiftBadge').style.display = 'inline';
+      sessionShift = active.id;
+      applyShiftHours(active);
+    }
+  }
+
+  // ── Set hours worked from shift duration ──
+  function applyShiftHours(shift) {
+    if (!shift?.start_time || !shift?.end_time) return;
+    const toMin = t => { const [h,m] = t.split(':').map(Number); return h*60+m; };
+    let diff = toMin(shift.end_time) - toMin(shift.start_time);
+    if (diff <= 0) diff += 24 * 60;
+    document.getElementById('hoursWorked').value = (diff / 60).toFixed(1);
+    document.getElementById('hoursBadge').style.display = 'inline';
+  }
+
+  // ── Date changed — update session, reload history ──
+  function onDateChange() {
+    DateState.setDate(document.getElementById('entryDate').value);
+    document.getElementById('dateBadge').style.display = 'inline';
+    checkDuplicate();
+    loadHistPanel();
+  }
+
+  // ── Line changed ──
+  async function onLineChange() {
+    const lineId   = document.getElementById('lineSelect').value;
+    const modelSel = document.getElementById('modelSelect');
+    modelSel.innerHTML = '<option value="">— Select Model —</option>';
+    modelSel.disabled  = !lineId;
+    // Reset rate table and info when line changes
+    _modelRateTable = [];
+    document.getElementById('productRateInfo').style.display = 'none';
+    document.getElementById('target').value = '';
+    clearHints();
+    if (!lineId) return;
+    const models = await API.get(`/api/master/models?line_id=${lineId}`);
+    models.forEach(m => modelSel.add(new Option(m.name, m.id)));
+    modelSel.disabled = false;
+    checkDuplicate();
+  }
+
+  let _modelRateTable = [];  // [{persons, rate, product_id, model_id}] for selected model
+
+  async function onModelChange() {
+    const modelId = document.getElementById('modelSelect').value;
+    _modelRateTable = [];
+
+    // Reset rate info panel and target
+    document.getElementById('productRateInfo').style.display = 'none';
+    document.getElementById('productRateLabel').textContent  = '';
+    document.getElementById('target').value = '';
+    delete document.getElementById('target').dataset.autoTarget;
+    clearHints();
+
+    if (!modelId) { checkDuplicate(); return; }
+
+    // Fetch all product_master rows for this model
+    // Each row has: no_of_persons, hourly_rate, persons_rate_json
+    const products = await API.get(`/api/master/products?model_id=${modelId}`);
+
+    // Build unified rate table from product_master table (persons_rate_json first, then no_of_persons/hourly_rate)
+    const seen = new Set();
+    products.forEach(p => {
+      let rows = [];
+
+      // 1. Try persons_rate_json (multi-row table set in Product Master page)
+      if (p.persons_rate_json) {
+        try {
+          const parsed = JSON.parse(p.persons_rate_json);
+          if (Array.isArray(parsed) && parsed.length) rows = parsed;
+        } catch {}
+      }
+
+      // 2. Fallback to single no_of_persons + hourly_rate fields
+      if (!rows.length) {
+        const persons = Number(p.no_of_persons);
+        const rate    = Number(p.hourly_rate);
+        if (persons > 0 && rate > 0) rows = [{ persons, rate }];
+      }
+
+      // 3. Last resort: if only hourly_rate set with no persons, still show it as "any persons"
+      if (!rows.length && Number(p.hourly_rate) > 0) {
+        rows = [{ persons: 0, rate: Number(p.hourly_rate) }];
+      }
+
+      rows.forEach(r => {
+        const persons = Number(r.persons);
+        const rate    = Number(r.rate);
+        if (!rate) return; // skip invalid rows
+        const key = `${persons}:${rate}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          _modelRateTable.push({ persons, rate, product_id: p.id });
+        }
+      });
+    });
+
+    _modelRateTable.sort((a, b) => a.persons - b.persons);
+
+    // Show available persons→rate options to guide user
+    if (_modelRateTable.length > 0) {
+      const opts = _modelRateTable.map(r => `${r.persons} persons → ${r.rate} units/hr`).join('  ·  ');
+      document.getElementById('productRateLabel').innerHTML =
+        `<strong>Rate table for this model:</strong>  ${opts}`;
+      document.getElementById('productRateInfo').style.display = 'block';
+
+      // Show hint under manpower field
+      showManpowerHint(_modelRateTable);
+    }
+
+    // If manpower already entered, try to match immediately
+    const typedMP = parseInt(document.getElementById('manpower').value);
+    if (typedMP) lookupAndSetTarget(_modelRateTable, typedMP);
+
+    checkDuplicate();
+  }
+
+  // Show manpower hint (persons options from rate table)
+  function showManpowerHint(rateTable) {
+    let hint = document.getElementById('manpowerHint');
+    if (!hint) {
+      hint = document.createElement('div');
+      hint.id = 'manpowerHint';
+      hint.style.cssText = 'font-size:0.72rem;color:var(--text-muted);margin-top:3px';
+      document.getElementById('manpower').parentElement.appendChild(hint);
+    }
+    const namedRows = rateTable.filter(r => r.persons > 0);
+    const fixedRate = rateTable.find(r => r.persons === 0);
+    if (namedRows.length) {
+      hint.textContent = `Valid manpower values: ${namedRows.map(r => r.persons).join(' / ')} persons`;
+    } else if (fixedRate) {
+      hint.textContent = `Fixed rate: ${fixedRate.rate} units/hr (any manpower)`;
+    }
+  }
+
+  function clearHints() {
+    ['manpowerHint','targetHint'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = '';
+    });
+  }
+
+  // Look up hourly rate for typed persons count against _modelRateTable
+  function lookupAndSetTarget(rateTable, persons) {
+    const hoursEl  = document.getElementById('hoursWorked');
+    const targetEl = document.getElementById('target');
+    // Exact match first; then check for persons=0 (fixed-rate, any manpower)
+    const match = rateTable.find(r => r.persons === persons)
+               || rateTable.find(r => r.persons === 0);
+
+    if (match) {
+      const hrs        = parseFloat(hoursEl.value) || 1;
+      const autoTarget = Math.round(match.rate * hrs);
+      targetEl.value               = autoTarget;
+      targetEl.dataset.autoTarget  = String(autoTarget);
+      // Visual pulse to confirm auto-fill
+      targetEl.style.transition = 'background 0.3s';
+      targetEl.style.background = 'rgba(0,119,204,0.12)';
+      setTimeout(() => { targetEl.style.background = ''; }, 800);
+      showAutoTargetHint(match.rate, hrs, autoTarget, persons);
+    } else {
+      // No match — clear target, show what's available
+      targetEl.value = '';
+      delete targetEl.dataset.autoTarget;
+      const hint = document.getElementById('targetHint');
+      if (hint && rateTable.length > 0) {
+        const avail = rateTable.map(r => `${r.persons}p`).join(' / ');
+        hint.textContent = `No rate for ${persons} persons. Valid: ${avail}`;
+        hint.style.color = 'var(--mahle-orange)';
+      }
+    }
+    recalc();
+  }
+
+  // (recalcTargetFromManpower defined below)
+
+  function showAutoTargetHint(rate, hrs, target, persons) {
+    let hint = document.getElementById('targetHint');
+    if (!hint) {
+      hint = document.createElement('div');
+      hint.id = 'targetHint';
+      hint.style.cssText = 'font-size:0.72rem;color:var(--mahle-blue);margin-top:4px;font-weight:600';
+      document.getElementById('target').parentElement.appendChild(hint);
+    }
+    hint.style.color = 'var(--mahle-blue)';
+    const pStr = persons ? ` (${persons} persons)` : '';
+    hint.textContent = `Auto${pStr}: ${rate} u/hr × ${hrs} hrs = ${target.toLocaleString()} units`;
+  }
+
+  // ── Shift changed — save as session default, set hours ──
+  function onShiftChange() {
+    const shiftId = document.getElementById('shiftSelect').value;
+    sessionShift  = shiftId;
+    document.getElementById('shiftBadge').style.display = shiftId ? 'inline' : 'none';
+    const shift = allShifts.find(s => s.id === shiftId);
+    if (shift) applyShiftHours(shift);
+    checkDuplicate();
+  }
+
+  // ── Duplicate rule: blocked only when ALL FOUR match — Line + Model + Shift + Date.
+  //   Same line + different model + same shift = ALLOWED (two models can run same hour).
+  //   Different line + same model + same shift = ALLOWED.
+  //   Same line + same model + different shift = ALLOWED. ──
+  async function checkDuplicate() {
+    const lineId  = document.getElementById('lineSelect').value;
+    const modelId = document.getElementById('modelSelect').value;
+    const shiftId = document.getElementById('shiftSelect').value;
+    const date    = document.getElementById('entryDate').value;
+    const warn    = document.getElementById('dupWarn');
+
+    // Need all four fields to evaluate — clear warning if any missing
+    if (!lineId || !modelId || !shiftId || !date) { warn.classList.remove('show'); return; }
+
+    try {
+      const entries = await API.get(`/api/production/entries?from=${date}&to=${date}&line_id=${lineId}`);
+      // Duplicate only if same Line + Model + Shift + Date all match
+      const isDup = entries.some(e =>
+        e.model_id === modelId &&
+        e.shift_id === shiftId
+      );
+      warn.classList.toggle('show', isDup);
+    } catch { warn.classList.remove('show'); }
+  }
+
+  // ── Live calc ──
+  function recalc() {
+    const target   = parseInt(document.getElementById('target').value) || 0;
+    const output   = parseInt(document.getElementById('output').value) || 0;
+    const manpower = parseInt(document.getElementById('manpower').value) || 0;
+    const hours    = parseFloat(document.getElementById('hoursWorked').value) || 8;
+
+    if (!target && !output) {
+      document.getElementById('calcPreview').style.display   = 'none';
+      document.getElementById('statusIndicator').style.display = 'none';
+      document.getElementById('downtimeSection').style.display = 'none';
+      return;
+    }
+    const eff  = target ? ((output / target) * 100).toFixed(1) : 0;
+    // UPMD = output / crew size. Same crew each hour — no hours divisor.
+    const upmd = manpower ? (output / manpower).toFixed(1) : '—';
+    const gap  = target - output;
+    document.getElementById('calcEff').textContent  = eff + '%';
+    document.getElementById('calcUPMD').textContent = upmd;
+    document.getElementById('calcGap').textContent  = gap > 0 ? '-'+gap : gap === 0 ? '0' : '+'+Math.abs(gap);
+    document.getElementById('calcPreview').style.display = 'grid';
+    if (output >= target) {
+      document.getElementById('statusIndicator').innerHTML = `<div class="status-indicator status-above">✓ Output meets or exceeds target — No downtime required</div>`;
+      document.getElementById('downtimeSection').style.display = 'none';
+    } else {
+      document.getElementById('statusIndicator').innerHTML = `<div class="status-indicator status-below">⚠ Output below target by ${gap} units — Downtime entry required</div>`;
+      document.getElementById('downtimeSection').style.display = 'block';
+      if (!document.getElementById('downtimeList').children.length) addDowntimeRow();
+    }
+    document.getElementById('statusIndicator').style.display = 'block';
+  }
+
+  function addDowntimeRow() {
+    const list = document.getElementById('downtimeList');
+    const row  = document.createElement('div');
+    row.className = 'downtime-row';
+    row.innerHTML = `
+      <select class="form-control" name="reason_id[]">
+        <option value="">— Select Reason —</option>
+        ${reasons.map(r => `<option value="${r.id}">${r.reason}</option>`).join('')}
+      </select>
+      <div style="display:flex;align-items:center;gap:6px">
+        <input type="number" class="form-control" name="duration[]" placeholder="Min" min="1" style="width:80px"/>
+        <span style="font-size:0.75rem;color:var(--text-muted)">min</span>
+      </div>
+      <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">✕</button>`;
+    list.appendChild(row);
+  }
+
+  // When hours change, re-derive target if manpower already matched a rate
+  function recalcTargetFromHours() {
+    const targetEl = document.getElementById('target');
+    if (!targetEl.dataset.autoTarget) return;  // target wasn't auto-set, don't touch it
+    const persons = parseInt(document.getElementById('manpower').value);
+    if (!persons || !_modelRateTable.length) return;
+    lookupAndSetTarget(_modelRateTable, persons);  // re-runs with new hours
+  }
+
+  // When manpower is typed, match against _modelRateTable and set target
+  function recalcTargetFromManpower() {
+    const persons = parseInt(document.getElementById('manpower').value);
+    if (!persons || !_modelRateTable.length) { recalc(); return; }
+    lookupAndSetTarget(_modelRateTable, persons);
+  }
+
+  // ── Clear only data fields; keep date/shift/line session defaults ──
+  function resetDataFields() {
+    const tEl = document.getElementById('target');
+    tEl.value = ''; delete tEl.dataset.autoTarget;
+    const hint = document.getElementById('targetHint');
+    if (hint) hint.textContent = '';
+    document.getElementById('output').value   = '';
+    const mpEl = document.getElementById('manpower');
+    mpEl.value = ''; delete mpEl.dataset.userSet;
+    document.getElementById('calcPreview').style.display    = 'none';
+    document.getElementById('statusIndicator').style.display = 'none';
+    document.getElementById('downtimeSection').style.display = 'none';
+    document.getElementById('downtimeList').innerHTML = '';
+    // Re-apply session shift default
+    if (sessionShift) {
+      document.getElementById('shiftSelect').value = sessionShift;
+      document.getElementById('shiftBadge').style.display = 'inline';
+    }
+    checkDuplicate();
+  }
+
+  // ── Live history panel ──
+  async function loadHistPanel() {
+    const date = document.getElementById('entryDate').value;
+    if (!date) return;
+    try {
+      const data = await API.get(`/api/production/entries?from=${date}&to=${date}`);
+      document.getElementById('histCount').textContent = `${data.length} record${data.length !== 1 ? 's' : ''}`;
+      const body = document.getElementById('histBody');
+      if (!data.length) {
+        body.innerHTML = '<div class="hist-empty">No entries for this date</div>';
+        return;
+      }
+      body.innerHTML = data.map(r => {
+        const eff   = r.target ? ((r.output / r.target) * 100).toFixed(1) : 0;
+        const color = parseFloat(eff) >= 100 ? 'var(--green)' : parseFloat(eff) >= 80 ? 'var(--mahle-orange)' : 'var(--red)';
+        const upmd  = r.manpower ? (r.output / r.manpower).toFixed(1) : '—';
+        return `<div class="hist-row">
+          <div class="hist-row-top">
+            <span><strong>${r.line_name}</strong> · ${r.shift_name || '—'}</span>
+            <span style="font-weight:700;color:${color}">${eff}%</span>
+          </div>
+          <div class="hist-row-sub" style="color:var(--mahle-blue);font-weight:600;font-size:0.78rem">
+            ${r.model_name || '—'}
+          </div>
+          <div class="hist-row-sub">
+            Out: ${r.output.toLocaleString()} / Tgt: ${r.target.toLocaleString()}
+            · MP: ${r.manpower} · U/P: ${upmd}
+            ${r.total_downtime_mins ? ` · DT: ${r.total_downtime_mins}min` : ''}
+          </div>
+        </div>`;
+      }).join('');
+    } catch { /* silent */ }
+  }
+
+  // ── Submit ──
+  async function submitEntry() {
+    if (document.getElementById('dupWarn').classList.contains('show')) {
+      showToast('Duplicate: same Line + Model + Shift + Date already exists. Change model or line to add another entry.', 'error');
+      return;
+    }
+    const lineId    = document.getElementById('lineSelect').value;
+    const modelId   = document.getElementById('modelSelect').value;
+    // Product ID: derive from matched rate table row (optional field)
+    const _mp = parseInt(document.getElementById('manpower').value);
+    const _matched = _modelRateTable.find(r => r.persons === _mp);
+    const productId = _matched ? (_matched.product_id || null) : null;
+    const shiftId   = document.getElementById('shiftSelect').value;
+    const date      = document.getElementById('entryDate').value;
+    const target    = parseInt(document.getElementById('target').value);
+    const output    = parseInt(document.getElementById('output').value);
+    const manpower  = parseInt(document.getElementById('manpower').value);
+    const hours     = parseFloat(document.getElementById('hoursWorked').value);
+
+    if (!lineId || !modelId || !shiftId || !date || isNaN(target) || isNaN(output) || isNaN(manpower)) {
+      showToast('Please fill all required fields', 'error'); return;
+    }
+
+    const downtimeRows = [];
+    if (output < target) {
+      const rows = document.querySelectorAll('.downtime-row');
+      for (const row of rows) {
+        const reasonId = row.querySelector('[name="reason_id[]"]').value;
+        const duration = parseInt(row.querySelector('[name="duration[]"]').value);
+        if (!reasonId || !duration) { showToast('Fill all downtime reason fields', 'error'); return; }
+        downtimeRows.push({ reason_id: reasonId, duration_minutes: duration });
+      }
+      if (!downtimeRows.length) { showToast('Add at least one downtime reason', 'error'); return; }
+    }
+
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Saving...';
+    try {
+      await API.post('/api/production/entries', {
+        line_id: lineId, model_id: modelId, product_id: productId || null,
+        shift_id: shiftId, date, target, output, manpower,
+        hours_worked: hours, downtime: downtimeRows
+      });
+      showToast('Production entry saved!', 'success');
+      btn.disabled = false; btn.innerHTML = 'Save Production Entry →';
+      resetDataFields();
+      loadHistPanel();
+    } catch (e) {
+      showToast(e.message || 'Failed to save entry', 'error');
+      btn.disabled = false; btn.innerHTML = 'Save Production Entry →';
+    }
+  }
+
+  init();
+</script>
+</body>
+</html>

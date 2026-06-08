@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MAHLE — Sign In</title>
+  <link rel="stylesheet" href="assets/css/main.css"/>
+  <style>
+    body {
+      background: var(--mahle-blue);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .bg-grid {
+      position: fixed; inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+      background-size: 48px 48px;
+      pointer-events: none;
+    }
+
+    .bg-glow {
+      position: fixed;
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(232,119,34,0.15) 0%, transparent 70%);
+      bottom: -200px; right: -100px;
+      pointer-events: none;
+    }
+
+    .bg-glow-2 {
+      position: fixed;
+      width: 400px; height: 400px;
+      background: radial-gradient(circle, rgba(0,119,204,0.2) 0%, transparent 70%);
+      top: -100px; left: -100px;
+      pointer-events: none;
+    }
+
+    .login-wrapper {
+      display: flex;
+      width: 900px;
+      max-width: 95vw;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.4);
+      position: relative;
+      z-index: 1;
+    }
+
+    .login-panel-left {
+      flex: 1;
+      background: linear-gradient(145deg, #002C4E 0%, #003E6B 50%, #005A9E 100%);
+      padding: 48px 44px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .login-panel-left::before {
+      content: '';
+      position: absolute;
+      bottom: -60px; right: -60px;
+      width: 280px; height: 280px;
+      border: 40px solid rgba(232,119,34,0.1);
+      border-radius: 50%;
+    }
+
+    .login-panel-left::after {
+      content: '';
+      position: absolute;
+      top: -40px; left: 60px;
+      width: 180px; height: 180px;
+      border: 30px solid rgba(255,255,255,0.04);
+      border-radius: 50%;
+    }
+
+    .brand-block { position: relative; z-index: 1; }
+
+    .brand-logo {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 40px;
+    }
+
+    .brand-logo-mark {
+      width: 48px; height: 48px;
+      background: var(--mahle-orange);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    .brand-logo-mark 
+          <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+            <!-- Car body -->
+            <path d="M2 13 L4 9 L7 8 L10 6 L14 6 L17 8 L21 9 L22 13 L22 16 L2 16 Z"/>
+            <!-- Wheels -->
+            <circle cx="6" cy="16" r="2" stroke="rgba(255,255,255,0.9)"/>
+            <circle cx="18" cy="16" r="2" stroke="rgba(255,255,255,0.9)"/>
+            <!-- Thermometer stem -->
+            <line x1="15" y1="3" x2="15" y2="11"/>
+            <!-- Thermometer bulb -->
+            <circle cx="15" cy="12" r="1.5" fill="rgba(255,180,80,0.9)" stroke="rgba(255,180,80,0.9)"/>
+            <!-- Thermometer outline -->
+            <rect x="13.5" y="2" width="3" height="9" rx="1.5" stroke="rgba(255,255,255,0.9)"/>
+            <!-- Mercury level -->
+            <line x1="15" y1="10" x2="15" y2="6" stroke="rgba(255,180,80,0.9)" stroke-width="1.5"/>
+          </svg>
+
+    .brand-name {
+      font-family: var(--font-condensed);
+      font-weight: 800;
+      font-size: 1.6rem;
+      color: white;
+      letter-spacing: 0.06em;
+    }
+
+    .brand-tagline {
+      font-family: var(--font-condensed);
+      font-size: 2rem;
+      font-weight: 700;
+      color: white;
+      line-height: 1.15;
+      margin-bottom: 16px;
+    }
+
+    .brand-tagline span { color: var(--mahle-orange-light); }
+
+    .brand-desc {
+      font-size: 0.875rem;
+      color: rgba(255,255,255,0.5);
+      line-height: 1.7;
+      max-width: 280px;
+    }
+
+    .feature-list {
+      display: flex; flex-direction: column; gap: 12px;
+      position: relative; z-index: 1;
+    }
+
+    .feature-item {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 0.82rem;
+      color: rgba(255,255,255,0.6);
+    }
+
+    .feature-dot {
+      width: 6px; height: 6px;
+      background: var(--mahle-orange);
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .login-panel-right {
+      width: 380px;
+      background: white;
+      padding: 40px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      overflow-y: auto;
+    }
+
+    .login-heading {
+      font-family: var(--font-condensed);
+      font-weight: 800;
+      font-size: 1.6rem;
+      color: var(--mahle-blue);
+      margin-bottom: 4px;
+    }
+
+    .login-sub {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+    }
+
+    .login-form .form-group { margin-bottom: 16px; }
+
+    .login-form .form-control {
+      padding: 11px 14px;
+      font-size: 0.925rem;
+    }
+
+    .btn-login {
+      width: 100%;
+      padding: 12px;
+      font-size: 0.95rem;
+      margin-top: 4px;
+      justify-content: center;
+      letter-spacing: 0.04em;
+    }
+
+    .login-error {
+      background: var(--red-bg);
+      border: 1px solid #fca5a5;
+      color: var(--red);
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      font-size: 0.85rem;
+      margin-bottom: 14px;
+      display: none;
+    }
+
+    .login-success {
+      background: var(--green-bg);
+      border: 1px solid #6ee7b7;
+      color: var(--green);
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      font-size: 0.85rem;
+      margin-bottom: 14px;
+      display: none;
+    }
+
+    .divider {
+      display: flex; align-items: center; gap: 10px;
+      margin: 20px 0;
+      color: var(--text-muted);
+      font-size: 0.78rem;
+    }
+    .divider::before, .divider::after {
+      content: ''; flex: 1;
+      height: 1px; background: var(--border);
+    }
+
+    .tab-row {
+      display: flex; gap: 0;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+    .tab-btn {
+      flex: 1; padding: 9px;
+      border: none; background: transparent;
+      font-family: var(--font-main);
+      font-size: 0.85rem; font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .tab-btn.active {
+      background: var(--mahle-blue);
+      color: white;
+    }
+
+    .login-footer {
+      margin-top: 20px;
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    @media (max-width: 700px) {
+      .login-panel-left { display: none; }
+      .login-panel-right { width: 100%; padding: 32px 24px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <div class="bg-glow"></div>
+  <div class="bg-glow-2"></div>
+
+  <div class="login-wrapper">
+    <!-- Left brand panel -->
+    <div class="login-panel-left">
+      <div class="brand-block">
+        <div class="brand-logo">
+          <div class="brand-logo-mark">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/>
+            </svg>
+          </div>
+          <div class="brand-name">MAHLE</div>
+        </div>
+        <div class="brand-tagline">
+          Production<br/><span>Intelligence</span><br/>Platform
+        </div>
+        <div class="brand-desc">
+          Real-time manufacturing data for thermal systems production lines. Track, analyse, and optimise.
+        </div>
+      </div>
+      <div class="feature-list">
+        <div class="feature-item"><div class="feature-dot"></div>Multi-line production tracking</div>
+        <div class="feature-item"><div class="feature-dot"></div>Hourly output vs target monitoring</div>
+        <div class="feature-item"><div class="feature-dot"></div>Downtime analysis & reporting</div>
+        <div class="feature-item"><div class="feature-dot"></div>Efficiency & productivity metrics</div>
+        <div class="feature-item"><div class="feature-dot"></div>Role-based access control</div>
+      </div>
+    </div>
+
+    <!-- Right panel -->
+    <div class="login-panel-right">
+      <div class="login-heading" id="panelHeading">Welcome back</div>
+      <div class="login-sub" id="panelSub">Sign in to your MAHLE account</div>
+
+      <!-- Tabs -->
+      <div class="tab-row">
+        <button class="tab-btn active" id="tabSignin" onclick="switchTab('signin')">Sign In</button>
+        <button class="tab-btn" id="tabSignup" onclick="switchTab('signup')">Sign Up</button>
+      </div>
+
+      <!-- Sign In Form -->
+      <div id="signinForm">
+        <div class="login-error" id="loginError"></div>
+        <div class="login-form">
+          <div class="form-group">
+            <label class="form-label">Email Address</label>
+            <input type="email" class="form-control" id="email" placeholder="you@mahle.com" autocomplete="email"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" class="form-control" id="password" placeholder="••••••••" autocomplete="current-password"/>
+          </div>
+          <button class="btn btn-orange btn-login" id="loginBtn" onclick="handleLogin()">
+            Sign In →
+          </button>
+        </div>
+      </div>
+
+      <!-- Sign Up Form -->
+      <div id="signupForm" style="display:none">
+        <div class="login-error" id="regError"></div>
+        <div class="login-success" id="regSuccess"></div>
+        <div class="login-form">
+          <div class="form-group">
+            <label class="form-label">Full Name</label>
+            <input type="text" class="form-control" id="regName" placeholder="Your full name"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email Address</label>
+            <input type="email" class="form-control" id="regEmail" placeholder="you@mahle.com"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" class="form-control" id="regPassword" placeholder="Min 8 characters"/>
+          </div>
+          <button class="btn btn-primary btn-login" id="regBtn" onclick="handleRegister()">
+            Create Account →
+          </button>
+        </div>
+        <div style="margin-top:12px;font-size:0.78rem;color:var(--text-muted);text-align:center">
+          New accounts are created as <strong>Operator</strong> role.<br/>Contact admin to change role.
+        </div>
+      </div>
+
+      <div class="login-footer">
+        MAHLE Thermal Systems &copy; 2025
+      </div>
+    </div>
+  </div>
+
+  <script src="assets/js/config.js"></script>
+  <script>
+    if (Auth.isLoggedIn()) window.location.href = 'dashboard.html';
+
+    document.getElementById('password').addEventListener('keydown', e => {
+      if (e.key === 'Enter') handleLogin();
+    });
+
+    function switchTab(tab) {
+      const isSignin = tab === 'signin';
+      document.getElementById('signinForm').style.display = isSignin ? 'block' : 'none';
+      document.getElementById('signupForm').style.display = isSignin ? 'none' : 'block';
+      document.getElementById('tabSignin').classList.toggle('active', isSignin);
+      document.getElementById('tabSignup').classList.toggle('active', !isSignin);
+      document.getElementById('panelHeading').textContent = isSignin ? 'Welcome back' : 'Create account';
+      document.getElementById('panelSub').textContent = isSignin ? 'Sign in to your MAHLE account' : 'Register as an Operator';
+    }
+
+    async function handleLogin() {
+      const email    = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const btn      = document.getElementById('loginBtn');
+      const errBox   = document.getElementById('loginError');
+
+      errBox.style.display = 'none';
+      if (!email || !password) {
+        errBox.textContent = 'Please enter your email and password.';
+        errBox.style.display = 'block'; return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Signing in...';
+
+      try {
+        const data = await API.post('/api/auth/login', { email, password });
+        Auth.setSession(data.access_token, data.user);
+        window.location.href = 'dashboard.html';
+      } catch (err) {
+        errBox.textContent = err.message || 'Invalid credentials. Please try again.';
+        errBox.style.display = 'block';
+        btn.disabled = false;
+        btn.innerHTML = 'Sign In →';
+      }
+    }
+
+    async function handleRegister() {
+      const name     = document.getElementById('regName').value.trim();
+      const email    = document.getElementById('regEmail').value.trim();
+      const password = document.getElementById('regPassword').value;
+      const btn      = document.getElementById('regBtn');
+      const errBox   = document.getElementById('regError');
+      const sucBox   = document.getElementById('regSuccess');
+
+      errBox.style.display = 'none';
+      sucBox.style.display = 'none';
+
+      if (!name || !email || !password) {
+        errBox.textContent = 'All fields are required.';
+        errBox.style.display = 'block'; return;
+      }
+      if (password.length < 8) {
+        errBox.textContent = 'Password must be at least 8 characters.';
+        errBox.style.display = 'block'; return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Creating account...';
+
+      try {
+        await API.post('/api/auth/register', { name, email, password });
+        sucBox.textContent = 'Account created! You can now sign in.';
+        sucBox.style.display = 'block';
+        document.getElementById('regName').value = '';
+        document.getElementById('regEmail').value = '';
+        document.getElementById('regPassword').value = '';
+        setTimeout(() => switchTab('signin'), 2000);
+      } catch (err) {
+        errBox.textContent = err.message || 'Registration failed. Try again.';
+        errBox.style.display = 'block';
+      }
+
+      btn.disabled = false;
+      btn.innerHTML = 'Create Account →';
+    }
+  </script>
+</body>
+</html>

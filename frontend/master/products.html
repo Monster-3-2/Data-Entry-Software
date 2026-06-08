@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Product Master — MAHLE</title>
+  <link rel="stylesheet" href="../assets/css/main.css"/>
+  <style>
+    .app-layout { display: flex; min-height: 100vh; }
+    .main-content { margin-left: var(--sidebar-width); flex: 1; display: flex; flex-direction: column; }
+    thead th { font-size: 0.72rem; padding: 9px 10px; }
+    tbody td { padding: 8px 10px; font-size: 0.83rem; }
+    .num-cell { font-family: var(--font-mono); font-size: 0.82rem; }
+    td.editable input, td.editable select { width: 100%; min-width: 60px; padding: 3px 6px; font-size: 0.82rem; }
+    .row-actions { display: flex; gap: 4px; white-space: nowrap; }
+    .rate-editor { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+    .rate-chip {
+      display:inline-flex; align-items:center; gap:4px;
+      background:rgba(0,62,107,0.07); border:1px solid var(--border);
+      border-radius:20px; padding:2px 8px; font-size:0.78rem; font-family:var(--font-mono);
+    }
+    .rate-chip button { background:none; border:none; color:var(--red); cursor:pointer; font-size:0.85rem; padding:0 2px; }
+    .rate-add-row { display:flex; gap:4px; align-items:center; margin-top:4px; }
+    .rate-add-row input { width:60px; padding:3px 6px; font-size:0.78rem; border:1px solid var(--border); border-radius:4px; }
+    .save-row-btn { display: none; }
+    tr.dirty .save-row-btn { display: inline-flex; }
+    tr.dirty { background: rgba(232,119,34,0.04) !important; }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-title">Product Master</div>
+      <div class="topbar-actions">
+        <button class="btn btn-orange btn-sm" onclick="openAddModal()">+ Add Product</button>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <div class="filter-bar">
+        <select class="form-control" id="filterLine" style="width:150px" onchange="onFilterLineChange()">
+          <option value="">All Lines</option>
+        </select>
+        <select class="form-control" id="filterModel" style="width:150px" onchange="loadProducts()">
+          <option value="">All Models</option>
+        </select>
+        <input type="text" class="form-control" id="filterSearch" placeholder="Search ID or description..." style="width:220px" oninput="loadProducts()"/>
+        <button class="btn btn-ghost btn-sm" onclick="resetFilters()">Clear</button>
+        <span style="margin-left:auto;font-size:0.82rem;color:var(--text-muted)" id="rowCount"></span>
+      </div>
+
+      <div class="card">
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Product ID</th>
+                <th>Description</th>
+                <th>Line</th>
+                <th>Model</th>
+                <th>Type</th>
+                <th>Hourly Rate</th>
+                <th>No. Persons</th>
+                <th>Persons → Rate</th>
+                <th>TE Time</th>
+                <th>Man Time</th>
+                <th>Machine Time</th>
+                <th>Handling Unit</th>
+                <th>Cycle Time</th>
+                <th>Cost</th>
+                <th>Active</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="productBody">
+              <tr><td colspan="16"><div class="loading-state"><span class="spinner"></span></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Modal -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-header">
+      <div class="modal-title">Add New Product</div>
+      <button class="modal-close" onclick="closeAddModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row form-row-2">
+        <div class="form-group"><label class="form-label">Line *</label>
+          <select class="form-control" id="addLine" onchange="loadAddModels()"><option value="">—</option></select></div>
+        <div class="form-group"><label class="form-label">Model *</label>
+          <select class="form-control" id="addModel" disabled><option value="">—</option></select></div>
+        <div class="form-group"><label class="form-label">Product ID *</label>
+          <input class="form-control" id="addProductId" placeholder="e.g. SS610001"/></div>
+        <div class="form-group"><label class="form-label">Type</label>
+          <select class="form-control" id="addType"><option value="">—</option><option value="type1">Type 1</option><option value="type2">Type 2</option><option value="type3">Type 3</option></select></div>
+      </div>
+      <div class="form-group"><label class="form-label">Description</label>
+        <input class="form-control" id="addDesc" placeholder="Product description"/></div>
+      <div class="form-row form-row-4">
+        <div class="form-group"><label class="form-label">Hourly Rate</label><input class="form-control" type="number" id="addHourlyRate" value="32"/></div>
+        <div class="form-group"><label class="form-label">EQ Factor</label><input class="form-control" type="number" id="addEqFactor" value="1.25" step="0.01"/></div>
+        <div class="form-group"><label class="form-label">No. Persons</label><input class="form-control" type="number" id="addPersons" value="10"/></div>
+        <div class="form-group"><label class="form-label">Pitch Time</label><input class="form-control" type="number" id="addPitchTime" value="1.84" step="0.01"/></div>
+        <div class="form-group"><label class="form-label">TE Time</label><input class="form-control" type="number" id="addTeTime" value="18.42" step="0.01"/></div>
+        <div class="form-group"><label class="form-label">Man Time</label><input class="form-control" type="number" id="addManTime" value="18.42" step="0.01"/></div>
+        <div class="form-group"><label class="form-label">Machine Time</label><input class="form-control" type="number" id="addMachineTime" value="0" step="0.01"/></div>
+        <div class="form-group"><label class="form-label">Handling Unit</label><input class="form-control" type="number" id="addHandling" value="12"/></div>
+        <div class="form-group"><label class="form-label">Cycle Time</label><input class="form-control" type="number" id="addCycleTime" value="0" step="0.01"/></div>
+        <div class="form-group"><label class="form-label">Cost</label><input class="form-control" type="number" id="addCost" value="0"/></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeAddModal()">Cancel</button>
+      <button class="btn btn-orange" onclick="saveNewProduct()">Add Product</button>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/config.js"></script>
+<script src="../assets/js/layout.js"></script>
+<script>
+  Auth.requireAuth(['admin']);
+  buildLayout('products');
+
+  let allLines = [], allModels = [], allProducts = [];
+
+  // ── Persons→Rate Editor ──────────────────────────────────
+  function parseRates(product) {
+    if (product.persons_rate_json) {
+      try { return JSON.parse(product.persons_rate_json); } catch {}
+    }
+    // Legacy single-row
+    if (product.no_of_persons && product.hourly_rate) {
+      return [{ persons: product.no_of_persons, rate: product.hourly_rate }];
+    }
+    return [];
+  }
+
+  function renderRateEditor(product) {
+    const rows  = parseRates(product);
+    const chips = rows.map((r, i) => `
+      <span class="rate-chip">
+        ${r.persons}p → ${r.rate}/hr
+        <button onclick="removeRate('${product.id}',${i})" title="Remove">×</button>
+      </span>`).join('');
+    return `<div class="rate-editor" id="re-${product.id}">
+      ${chips}
+      <div class="rate-add-row">
+        <input type="number" placeholder="Persons" id="rp-${product.id}" min="1" style="width:70px"/>
+        <input type="number" placeholder="Rate/hr" id="rr-${product.id}" min="1" style="width:70px"/>
+        <button class="btn btn-primary btn-sm" onclick="addRate('${product.id}')">+ Add</button>
+      </div>
+    </div>`;
+  }
+
+  function getRates(productId) {
+    const p = allProducts.find(x => x.id === productId);
+    if (!p) return [];
+    return parseRates(p);
+  }
+
+  async function addRate(productId) {
+    const persons = parseInt(document.getElementById('rp-' + productId).value);
+    const rate    = parseFloat(document.getElementById('rr-' + productId).value);
+    if (!persons || !rate) { showToast('Enter persons and rate', 'error'); return; }
+    const rows = getRates(productId);
+    // Update or add
+    const existing = rows.findIndex(r => r.persons === persons);
+    if (existing >= 0) rows[existing].rate = rate;
+    else rows.push({ persons, rate });
+    rows.sort((a, b) => a.persons - b.persons);
+    await saveRates(productId, rows);
+  }
+
+  async function removeRate(productId, index) {
+    const rows = getRates(productId);
+    rows.splice(index, 1);
+    await saveRates(productId, rows);
+  }
+
+  async function saveRates(productId, rows) {
+    try {
+      await API.put(`/api/master/products/${productId}`, {
+        persons_rate_json: JSON.stringify(rows),
+        // Also sync no_of_persons and hourly_rate to first row for backward compat
+        no_of_persons: rows[0]?.persons || 1,
+        hourly_rate:   rows[0]?.rate    || 0,
+      });
+      // Update local cache and re-render just this cell
+      const p = allProducts.find(x => x.id === productId);
+      if (p) { p.persons_rate_json = JSON.stringify(rows); p.no_of_persons = rows[0]?.persons||1; p.hourly_rate = rows[0]?.rate||0; }
+      const cell = document.getElementById('rate-cell-' + productId);
+      if (cell) cell.innerHTML = renderRateEditor(allProducts.find(x => x.id === productId));
+      showToast('Persons→Rate saved', 'success');
+    } catch(e) { showToast(e.message || 'Save failed', 'error'); }
+  }
+  // ─────────────────────────────────────────────────────────
+
+  async function init() {
+    [allLines, allModels] = await Promise.all([
+      API.get('/api/master/lines'),
+      API.get('/api/master/models'),
+    ]);
+    allLines.forEach(l => {
+      document.getElementById('filterLine').add(new Option(l.name, l.id));
+      document.getElementById('addLine').add(new Option(l.name, l.id));
+    });
+    loadProducts();
+  }
+
+  async function onFilterLineChange() {
+    const lineId = document.getElementById('filterLine').value;
+    const modelSel = document.getElementById('filterModel');
+    modelSel.innerHTML = '<option value="">All Models</option>';
+    allModels.filter(m => !lineId || m.line_id === lineId)
+      .forEach(m => modelSel.add(new Option(m.name, m.id)));
+    loadProducts();
+  }
+
+  async function loadProducts() {
+    const lineId  = document.getElementById('filterLine').value;
+    const modelId = document.getElementById('filterModel').value;
+    const search  = document.getElementById('filterSearch').value.toLowerCase();
+
+    let q = '?';
+    if (lineId) q += `line_id=${lineId}&`;
+    if (modelId) q += `model_id=${modelId}&`;
+
+    document.getElementById('productBody').innerHTML = '<tr><td colspan="16"><div class="loading-state"><span class="spinner"></span></div></td></tr>';
+
+    allProducts = await API.get('/api/master/products' + q);
+
+    let filtered = allProducts;
+    if (search) filtered = filtered.filter(p =>
+      (p.product_id || '').toLowerCase().includes(search) ||
+      (p.description || '').toLowerCase().includes(search)
+    );
+
+    document.getElementById('rowCount').textContent = `${filtered.length} products`;
+    renderTable(filtered);
+  }
+
+  function modelName(modelId) {
+    const m = allModels.find(x => x.id === modelId);
+    return m ? m.name : '—';
+  }
+
+  function lineName(modelId) {
+    const m = allModels.find(x => x.id === modelId);
+    if (!m) return '—';
+    const l = allLines.find(x => x.id === m.line_id);
+    return l ? l.name : '—';
+  }
+
+  function editableNum(val, field, id) {
+    return `<td class="editable num-cell" onclick="makeEditable(this,'${field}','${id}','number')">${fmtNum(val)}</td>`;
+  }
+
+  function editableText(val, field, id) {
+    return `<td class="editable" onclick="makeEditable(this,'${field}','${id}','text')">${val || ''}</td>`;
+  }
+
+  function renderTable(data) {
+    if (!data.length) {
+      document.getElementById('productBody').innerHTML = '<tr><td colspan="16"><div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-title">No products found</div></div></td></tr>';
+      return;
+    }
+    document.getElementById('productBody').innerHTML = data.map((p, i) => `
+      <tr id="row-${p.id}">
+        <td>${i+1}</td>
+        ${editableText(p.product_id, 'product_id', p.id)}
+        ${editableText(p.description, 'description', p.id)}
+        <td>${lineName(p.model_id)}</td>
+        <td>${modelName(p.model_id)}</td>
+        <td class="editable" onclick="makeSelectEditable(this,'product_type','${p.id}',['','type1','type2','type3'],'${p.product_type||''}')">${p.product_type || '—'}</td>
+        ${editableNum(p.hourly_rate, 'hourly_rate', p.id)}
+        <td class="editable num-cell" onclick="makeEditable(this,'no_of_persons','${p.id}','number')">${p.no_of_persons}</td>
+        <td style="min-width:220px" id="rate-cell-${p.id}">${renderRateEditor(p)}</td>
+        ${editableNum(p.te_time, 'te_time', p.id)}
+        ${editableNum(p.man_time, 'man_time', p.id)}
+        ${editableNum(p.machine_time, 'machine_time', p.id)}
+        <td class="editable num-cell" onclick="makeEditable(this,'handling_unit','${p.id}','number')">${p.handling_unit}</td>
+        ${editableNum(p.cycle_time, 'cycle_time', p.id)}
+        ${editableNum(p.cost, 'cost', p.id)}
+        <td>
+          <label style="cursor:pointer">
+            <input type="checkbox" ${p.is_active?'checked':''} onchange="toggleActive('${p.id}',this.checked)"/>
+          </label>
+        </td>
+        <td>
+          <div class="row-actions">
+            <button class="btn btn-danger btn-sm" onclick="deleteProduct('${p.id}')">Del</button>
+            <button class="btn btn-primary btn-sm save-row-btn" onclick="saveRow('${p.id}')">Save</button>
+          </div>
+        </td>
+      </tr>`).join('');
+  }
+
+  // Inline editing
+  const dirtyRows = {}; // id -> field -> value
+
+  function makeEditable(td, field, id, type) {
+    if (td.querySelector('input')) return;
+    const cur = td.textContent.trim();
+    const input = document.createElement('input');
+    input.type = type; input.value = cur;
+    td.innerHTML = ''; td.appendChild(input);
+    input.focus();
+    input.addEventListener('blur', () => {
+      const newVal = type === 'number' ? parseFloat(input.value) : input.value;
+      td.textContent = type === 'number' ? fmtNum(newVal) : newVal;
+      if (!dirtyRows[id]) dirtyRows[id] = {};
+      dirtyRows[id][field] = newVal;
+      document.getElementById('row-' + id)?.classList.add('dirty');
+    });
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
+  }
+
+  function makeSelectEditable(td, field, id, options, cur) {
+    if (td.querySelector('select')) return;
+    const sel = document.createElement('select');
+    options.forEach(o => sel.add(new Option(o || '—', o)));
+    sel.value = cur;
+    td.innerHTML = ''; td.appendChild(sel);
+    sel.focus();
+    sel.addEventListener('change', () => {
+      if (!dirtyRows[id]) dirtyRows[id] = {};
+      dirtyRows[id][field] = sel.value;
+      document.getElementById('row-' + id)?.classList.add('dirty');
+    });
+    sel.addEventListener('blur', () => { td.textContent = sel.value || '—'; });
+  }
+
+  async function saveRow(id) {
+    if (!dirtyRows[id]) return;
+    try {
+      await API.put(`/api/master/products/${id}`, dirtyRows[id]);
+      delete dirtyRows[id];
+      document.getElementById('row-' + id)?.classList.remove('dirty');
+      showToast('Product updated', 'success');
+    } catch (e) { showToast(e.message || 'Save failed', 'error'); }
+  }
+
+  async function toggleActive(id, val) {
+    try {
+      await API.put(`/api/master/products/${id}`, { is_active: val });
+      showToast('Status updated', 'success');
+    } catch (e) { showToast('Failed', 'error'); }
+  }
+
+  async function deleteProduct(id) {
+    showConfirm('This product will be permanently deleted.', async () => {
+      try {
+        await API.delete(`/api/master/products/${id}`);
+        showToast('Product deleted', 'success');
+        loadProducts();
+      } catch (e) { showToast(e.message, 'error'); }
+    }, { title: 'Delete Product?', confirmLabel: 'Delete', type: 'danger' });
+  }
+
+  // Add modal
+  async function loadAddModels() {
+    const lineId = document.getElementById('addLine').value;
+    const sel = document.getElementById('addModel');
+    sel.innerHTML = '<option value="">—</option>';
+    sel.disabled = !lineId;
+    allModels.filter(m => m.line_id === lineId).forEach(m => sel.add(new Option(m.name, m.id)));
+    sel.disabled = false;
+  }
+
+  function openAddModal() { document.getElementById('addModal').classList.add('open'); }
+  function closeAddModal() { document.getElementById('addModal').classList.remove('open'); }
+
+  async function saveNewProduct() {
+    const modelId = document.getElementById('addModel').value;
+    const productId = document.getElementById('addProductId').value.trim();
+    if (!modelId || !productId) { showToast('Line, Model, and Product ID are required', 'error'); return; }
+
+    const body = {
+      model_id: modelId,
+      product_id: productId,
+      description: document.getElementById('addDesc').value,
+      product_type: document.getElementById('addType').value || null,
+      hourly_rate: parseFloat(document.getElementById('addHourlyRate').value) || 0,
+      eq_factor: parseFloat(document.getElementById('addEqFactor').value) || 1,
+      no_of_persons: parseInt(document.getElementById('addPersons').value) || 1,
+      pitch_time: parseFloat(document.getElementById('addPitchTime').value) || 0,
+      te_time: parseFloat(document.getElementById('addTeTime').value) || 0,
+      man_time: parseFloat(document.getElementById('addManTime').value) || 0,
+      machine_time: parseFloat(document.getElementById('addMachineTime').value) || 0,
+      handling_unit: parseInt(document.getElementById('addHandling').value) || 1,
+      cycle_time: parseFloat(document.getElementById('addCycleTime').value) || 0,
+      cost: parseFloat(document.getElementById('addCost').value) || 0,
+    };
+
+    try {
+      await API.post('/api/master/products', body);
+      showToast('Product added successfully', 'success');
+      closeAddModal();
+      loadProducts();
+    } catch (e) { showToast(e.message || 'Failed to add product', 'error'); }
+  }
+
+  function resetFilters() {
+    document.getElementById('filterLine').value = '';
+    document.getElementById('filterModel').innerHTML = '<option value="">All Models</option>';
+    document.getElementById('filterSearch').value = '';
+    loadProducts();
+  }
+
+  init();
+</script>
+</body>
+</html>

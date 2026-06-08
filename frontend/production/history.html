@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Entry History — MAHLE Production</title>
+  <link rel="stylesheet" href="../assets/css/main.css"/>
+  <style>
+    .app-layout { display: flex; min-height: 100vh; }
+    .main-content { margin-left: var(--sidebar-width); flex: 1; display: flex; flex-direction: column; }
+    .gap-col { color: var(--text-muted); font-family: var(--font-mono); font-size: 0.8rem; }
+    .eff-cell { font-family: var(--font-condensed); font-weight: 700; font-size: 0.95rem; }
+    .filter-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
+    .filter-bar .form-control { font-size: 0.82rem; }
+    .filter-label { font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+    .filter-group { display: flex; align-items: center; gap: 6px; }
+    .filter-divider { width: 1px; height: 28px; background: var(--border); margin: 0 4px; }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-title">Entry History</div>
+      <div class="topbar-actions">
+        <a href="/production/entry.html" class="btn btn-orange btn-sm">+ New Entry</a>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <!-- Filters -->
+      <div class="filter-bar">
+        <div class="filter-group">
+          <span class="filter-label">Date</span>
+          <input type="date" class="form-control" id="filterFrom" style="width:145px"/>
+          <span style="color:var(--text-muted);font-size:0.8rem">→</span>
+          <input type="date" class="form-control" id="filterTo" style="width:145px"/>
+        </div>
+        <div class="filter-divider"></div>
+        <div class="filter-group">
+          <span class="filter-label">Line</span>
+          <select class="form-control" id="filterLine" style="width:130px">
+            <option value="">All Lines</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <span class="filter-label">Shift</span>
+          <select class="form-control" id="filterShift" style="width:150px">
+            <option value="">All Shifts</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <span class="filter-label">Model</span>
+          <select class="form-control" id="filterModel" style="width:130px">
+            <option value="">All Models</option>
+          </select>
+        </div>
+        <div class="filter-divider"></div>
+        <button class="btn btn-primary btn-sm" onclick="loadHistory()">Apply</button>
+        <button class="btn btn-ghost btn-sm" onclick="clearFilters()">Clear</button>
+        <span style="margin-left:auto;font-size:0.82rem;color:var(--text-muted)" id="recordCount"></span>
+      </div>
+
+      <div class="card">
+        <div class="table-wrapper">
+          <table id="historyTable">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Line</th>
+                <th>Model</th>
+                <th>Shift / Hour</th>
+                <th>Target</th>
+                <th>Output</th>
+                <th>Gap</th>
+                <th>Efficiency</th>
+                <th>Manpower</th>
+                <th>Units/Person</th>
+                <th>Downtime</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="historyBody">
+              <tr><td colspan="12"><div class="loading-state"><span class="spinner"></span> Loading...</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Edit Production Entry</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editId"/>
+      <div class="form-row form-row-2">
+        <div class="form-group"><label class="form-label">Target</label><input type="number" class="form-control" id="editTarget"/></div>
+        <div class="form-group"><label class="form-label">Output</label><input type="number" class="form-control" id="editOutput"/></div>
+        <div class="form-group"><label class="form-label">Manpower</label><input type="number" class="form-control" id="editManpower"/></div>
+        <div class="form-group"><label class="form-label">Hours Worked</label><input type="number" class="form-control" id="editHours" step="0.5"/></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEdit()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/config.js"></script>
+<script src="../assets/js/layout.js"></script>
+<script>
+  Auth.requireAuth(['admin','product_lead','operator']);
+  buildLayout('history');
+</script>
+<script>
+  const user    = Auth.getUser();
+  const isAdmin = user.role === 'admin';
+
+  // ── Shared date state ──
+  document.getElementById('filterFrom').value = DateState.getFrom();
+  document.getElementById('filterTo').value   = DateState.getTo();
+  document.getElementById('filterFrom').addEventListener('change', function() { DateState.setFrom(this.value); });
+  document.getElementById('filterTo').addEventListener('change',   function() { DateState.setTo(this.value); });
+
+  // ── Init: load lines, shifts, models in parallel ──
+  async function init() {
+    try {
+      const [lines, shifts, models] = await Promise.all([
+        API.get('/api/master/lines'),
+        API.get('/api/master/shifts'),
+        API.get('/api/master/models').catch(() => []),
+      ]);
+
+      const lineSel = document.getElementById('filterLine');
+      const shiftSel = document.getElementById('filterShift');
+      const modelSel = document.getElementById('filterModel');
+
+      if(lineSel) lines.forEach(l  => lineSel.add(new Option(l.name, l.id)));
+      if(shiftSel) shifts.forEach(s => shiftSel.add(new Option(`${s.name} (${s.start_time})`, s.id)));
+      if(modelSel) models.forEach(m => modelSel.add(new Option(m.name, m.id)));
+
+      loadHistory();
+    } catch (err) {
+      console.error("Initialization failed:", err);
+      document.getElementById('historyBody').innerHTML =
+        '<tr><td colspan="12"><div class="empty-state"><div class="empty-state-icon">⚠</div>' +
+        '<div class="empty-state-title">Server starting up — please wait</div>' +
+        '<div style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="init()">Retry</button></div>' +
+        '</div></td></tr>';
+      showToast('Server starting up, retrying in 5s…', 'error');
+      setTimeout(init, 5000);
+    }
+  }
+
+  // ── Build query from all active filters ──
+  function buildQuery() {
+    const from    = document.getElementById('filterFrom').value;
+    const to      = document.getElementById('filterTo').value;
+    const lineId  = document.getElementById('filterLine').value;
+    const shiftId = document.getElementById('filterShift').value;
+    const modelId = document.getElementById('filterModel').value;
+
+    const params = new URLSearchParams();
+    if (from)    params.set('from', from);
+    if (to)      params.set('to', to);
+    if (lineId)  params.set('line_id', lineId);
+    if (shiftId) params.set('shift_id', shiftId);
+    if (modelId) params.set('model_id', modelId);
+    return '?' + params.toString();
+  }
+
+  // Cache handled by config.js (multi-tier TTL via API.request patch)
+
+  async function loadHistory() {
+    const q = buildQuery();
+    const tbody = document.getElementById('historyBody');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '<tr><td colspan="12"><div class="loading-state"><span class="spinner"></span> Loading...</div></td></tr>';
+    try {
+      const data = await API.get('/api/production/entries' + q);
+      const countEl = document.getElementById('recordCount');
+      if (countEl) {
+        countEl.textContent = `${data.length} record${data.length !== 1 ? 's' : ''}`;
+      }
+      renderTable(data);
+    } catch (e) {
+      showToast('Failed to load history', 'error');
+    }
+  }
+
+  function renderTable(data) {
+    const tbody = document.getElementById('historyBody');
+    if (!tbody) return;
+
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="12"><div class="empty-state"><div class="empty-state-icon">📭</div><div class="empty-state-title">No entries found</div></div></td></tr>';
+      return;
+    }
+
+    const rows = data.map(row => {
+      const eff   = efficiency(row.output, row.target);
+      const color = efficiencyColor(eff);
+      const gap   = row.output - row.target;
+      const upmd  = row.manpower ? (row.output / row.manpower).toFixed(1) : '—';
+      const canEdit = isAdmin || (user.role === 'operator' && row.entered_by === user.id && row.date === DateState._today());
+
+      return `<tr>
+        <td>${fmtDate(row.date)}</td>
+        <td><strong>${row.line_name}</strong></td>
+        <td style="color:var(--mahle-blue);font-weight:600">${row.model_name || '—'}</td>
+        <td>${row.shift_name || '—'}</td>
+        <td style="font-family:var(--font-mono)">${row.target.toLocaleString()}</td>
+        <td style="font-family:var(--font-mono)">${row.output.toLocaleString()}</td>
+        <td class="gap-col">${gap >= 0 ? '+'+gap : gap}</td>
+        <td class="eff-cell" style="color:${color}">${eff}%</td>
+        <td>${row.manpower}</td>
+        <td style="font-family:var(--font-mono)">${upmd}</td>
+        <td>${row.total_downtime_mins ? row.total_downtime_mins + ' min' : '<span style="color:var(--text-muted)">—</span>'}</td>
+        <td>
+          ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick='openEdit(${JSON.stringify(row)})'>Edit</button>` : '<span style="color:var(--text-muted);font-size:0.78rem">—</span>'}
+          ${isAdmin ? `<button class="btn btn-danger btn-sm" style="margin-left:4px" onclick="deleteEntry('${row.id}')">Del</button>` : ''}
+        </td>
+      </tr>`;
+    });
+    tbody.innerHTML = rows.join('');
+  }
+
+  function openEdit(row) {
+    document.getElementById('editId').value       = row.id;
+    document.getElementById('editTarget').value   = row.target;
+    document.getElementById('editOutput').value   = row.output;
+    document.getElementById('editManpower').value = row.manpower;
+    document.getElementById('editHours').value    = row.hours_worked;
+    document.getElementById('editModal').classList.add('open');
+  }
+
+  function closeModal() { document.getElementById('editModal').classList.remove('open'); }
+
+  async function saveEdit() {
+    const id = document.getElementById('editId').value;
+    const body = {
+      target:       parseInt(document.getElementById('editTarget').value),
+      output:       parseInt(document.getElementById('editOutput').value),
+      manpower:     parseInt(document.getElementById('editManpower').value),
+      hours_worked: parseFloat(document.getElementById('editHours').value),
+    };
+    try {
+      await API.put(`/api/production/entries/${id}`, body);
+      showToast('Entry updated', 'success');
+      closeModal(); loadHistory();
+    } catch (e) { showToast(e.message || 'Update failed', 'error'); }
+  }
+
+  async function deleteEntry(id) {
+    showConfirm('This production entry will be permanently removed.', async () => {
+      try {
+        await API.delete(`/api/production/entries/${id}`);
+        showToast('Entry deleted', 'success');
+        loadHistory();
+      } catch (e) { showToast(e.message || 'Delete failed', 'error'); }
+    }, { title: 'Delete Entry?', confirmLabel: 'Delete', type: 'danger' });
+  }
+
+  function clearFilters() {
+    const f = DateState._daysAgo(7);
+    const t = DateState._today();
+    document.getElementById('filterFrom').value  = f;
+    document.getElementById('filterTo').value    = t;
+    document.getElementById('filterLine').value  = '';
+    document.getElementById('filterShift').value = '';
+    document.getElementById('filterModel').value = '';
+    DateState.setFrom(f); DateState.setTo(t);
+    loadHistory();
+  }
+
+  init();
+</script>
+</body>
+</html>
