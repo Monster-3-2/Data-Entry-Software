@@ -63,22 +63,30 @@ def get_entries(
     rows = q.execute().data
 
     # Flatten and compute downtime
+    # ONE batch query for all downtime instead of one per row
+    all_entry_ids = [row["id"] for row in rows]
+    dt_all = []
+    if all_entry_ids:
+        dt_all = supabase_admin.table("downtime_entries").select(
+            "production_entry_id, duration_minutes"
+        ).in_("production_entry_id", all_entry_ids).execute().data
+    
+    # Build a lookup dict: entry_id -> total downtime minutes
+    dt_map = {}
+    for d in dt_all:
+        eid = d["production_entry_id"]
+        dt_map[eid] = dt_map.get(eid, 0) + d["duration_minutes"]
+    
+    # Now build result without any extra DB calls
     result = []
     for row in rows:
-        entry_id = row["id"]
-        dt_res = supabase_admin.table("downtime_entries").select(
-            "duration_minutes, downtime_reasons(reason)"
-        ).eq("production_entry_id", entry_id).execute().data
-
-        total_dt = sum(d["duration_minutes"] for d in dt_res)
-
         result.append({
             **row,
             "line_name":  row.get("lines", {}).get("name", "—") if row.get("lines") else "—",
             "model_name": row.get("models", {}).get("name", "—") if row.get("models") else "—",
             "shift_name": row.get("shifts", {}).get("name", "—") if row.get("shifts") else "—",
             "entered_by_name": row.get("user_profiles", {}).get("name", "—") if row.get("user_profiles") else "—",
-            "total_downtime_mins": total_dt,
+            "total_downtime_mins": dt_map.get(row["id"], 0),
         })
 
     return result
