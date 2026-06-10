@@ -3,7 +3,7 @@ services:
     name: mahle-production-api
     runtime: python
     rootDir: backend
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements.txt && pip uninstall h2 -y || true
     startCommand: uvicorn main:app --host 0.0.0.0 --port 10000
     envVars:
       - key: SUPABASE_URL
@@ -16,3 +16,4 @@ services:
         sync: false
       - key: FRONTEND_URL
         sync: false
+ 
