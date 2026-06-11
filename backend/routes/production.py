@@ -111,13 +111,27 @@ def create_entry(body: ProductionEntryCreate, user=Depends(require_operator_or_a
         )
 
     # Operator role: target must come from product master (cannot be manually set)
+    # Operator role: target must come from product master (cannot be manually set)
     if user["role"] == "operator" and body.product_id:
-        product = supabase_admin.table("product_master").select("hourly_rate").eq("id", body.product_id).single().execute().data
-        if product and product.get("hourly_rate"):
-            auto_target = round(product["hourly_rate"] * (body.hours_worked or 1))
-        else:
-            auto_target = body.target  # no master data, use submitted
-        target_val = auto_target
+        import json
+        product = supabase_admin.table("product_master") \
+            .select("hourly_rate, persons_rate_json") \
+            .eq("id", body.product_id).single().execute().data
+        matched_rate = None
+        if product:
+            # First: try persons_rate_json — match by manpower typed by operator
+            if product.get("persons_rate_json"):
+                try:
+                    rate_rows = json.loads(product["persons_rate_json"])
+                    row = next((r for r in rate_rows if int(r["persons"]) == body.manpower), None)
+                    if row:
+                        matched_rate = float(row["rate"])
+                except Exception:
+                    pass
+            # Fallback: use hourly_rate (old single-value field)
+            if matched_rate is None and product.get("hourly_rate"):
+                matched_rate = float(product["hourly_rate"])
+        target_val = round(matched_rate * (body.hours_worked or 8)) if matched_rate else body.target
     else:
         target_val = body.target
 
