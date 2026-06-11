@@ -699,7 +699,8 @@
         const reasonId = row.querySelector('[name="reason_id[]"]').value;
         const duration = parseInt(row.querySelector('[name="duration[]"]').value);
         if (!reasonId || !duration) { showToast('Fill all downtime reason fields', 'error'); return; }
-        downtimeRows.push({ reason_id: reasonId, duration_minutes: duration });
+        const remarks = row.querySelector('[name="remarks[]"]').value.trim() || null;
+        downtimeRows.push({ reason_id: reasonId, duration_minutes: duration, remarks });
       }
       if (!downtimeRows.length) { showToast('Add at least one downtime reason', 'error'); return; }
     }
