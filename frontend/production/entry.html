@@ -585,17 +585,18 @@
     const row  = document.createElement('div');
     row.className = 'downtime-row';
     row.innerHTML = `
-      <select class="form-control" name="reason_id[]">
-        <option value="">— Select Reason —</option>
-        ${reasons.map(r => `<option value="${r.id}">${r.reason}</option>`).join('')}
-      </select>
-      <div style="display:flex;align-items:center;gap:6px">
-        <input type="number" class="form-control" name="duration[]" placeholder="Min" min="1" style="width:80px"/>
-        <span style="font-size:0.75rem;color:var(--text-muted)">min</span>
-      </div>
-      <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">✕</button>`;
-    list.appendChild(row);
-  }
+          <select class="form-control" name="reason_id[]">
+            <option value="">— Select Reason —</option>
+            ${reasons.map(r => `<option value="${r.id}">${r.reason}</option>`).join('')}
+          </select>
+          <div style="display:flex;align-items:center;gap:6px">
+            <input type="number" class="form-control" name="duration[]" placeholder="Min" min="1" style="width:80px"/>
+            <span style="font-size:0.75rem;color:var(--text-muted)">min</span>
+          </div>
+          <input type="text" class="form-control" name="remarks[]" placeholder="Remark (optional)" style="font-size:0.85rem"/>
+          <button class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">✕</button>`;
+        list.appendChild(row);
+      }
 
   // When hours change, re-derive target if manpower already matched a rate
   function recalcTargetFromHours() {
