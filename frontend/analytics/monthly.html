@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Monthly Summary — MAHLE Production</title>
+  <link rel="stylesheet" href="../assets/css/main.css"/>
+  <style>
+    .app-layout { display: flex; min-height: 100vh; }
+    .main-content { margin-left: var(--sidebar-width); flex: 1; display: flex; flex-direction: column; }
+    thead th { font-size: 0.72rem; padding: 9px 12px; }
+    tbody td { padding: 9px 12px; font-size: 0.84rem; }
+    .num { font-family: var(--font-mono); font-size: 0.82rem; }
+    .eff-pill { display:inline-block; padding:2px 8px; border-radius:20px; font-weight:700; font-family:var(--font-condensed); font-size:0.9rem; }
+    .summary-bar { background:linear-gradient(120deg,var(--mahle-blue) 0%,var(--mahle-blue-mid) 100%); padding:20px 24px; border-radius:var(--radius-lg); color:white; display:grid; grid-template-columns:repeat(5,1fr); gap:20px; margin-bottom:20px; }
+    .sum-item { text-align:center; }
+    .sum-val { font-family:var(--font-condensed); font-size:1.6rem; font-weight:700; line-height:1; }
+    .sum-label { font-size:0.68rem; color:rgba(255,255,255,0.55); text-transform:uppercase; letter-spacing:0.06em; margin-top:4px; }
+    tfoot td { background:var(--bg); font-weight:700; font-family:var(--font-condensed); font-size:0.9rem; border-top:2px solid var(--border); }
+    .col-hint { font-size:0.65rem; color:var(--text-muted); font-weight:400; display:block; }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-title">Monthly Summary</div>
+      <div class="topbar-actions">
+        <select class="form-control" id="monthSel" style="width:130px" onchange="loadSummary()"></select>
+        <select class="form-control" id="yearSel"  style="width:100px" onchange="loadSummary()"></select>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="exportCSV()">↓ Export CSV</button>
+      </div>
+    </div>
+    <div class="page-content">
+      <div class="summary-bar">
+        <div class="sum-item"><div class="sum-val" id="sOutput">—</div><div class="sum-label">Total Output</div></div>
+        <div class="sum-item"><div class="sum-val" id="sTarget">—</div><div class="sum-label">Total Target</div></div>
+        <div class="sum-item"><div class="sum-val" id="sEff">—</div><div class="sum-label">Avg Efficiency</div></div>
+        <div class="sum-item"><div class="sum-val" id="sUPMD">—</div><div class="sum-label">Avg U/ManDay</div></div>
+        <div class="sum-item"><div class="sum-val" id="sLines">—</div><div class="sum-label">Active Lines</div></div>
+      </div>
+      <div class="card">
+        <div class="table-wrapper">
+          <table id="summaryTable">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Line</th>
+                <th>Model</th>
+                <th>Days Recorded<span class="col-hint">distinct dates</span></th>
+                <th>Total Target</th>
+                <th>Total Output</th>
+                <th>Gap</th>
+                <th>Efficiency %</th>
+                <th>Manpower<span class="col-hint">peak crew size</span></th>
+                <th>Units / Man-Day</th>
+              </tr>
+            </thead>
+            <tbody id="summaryBody">
+              <tr><td colspan="10"><div class="loading-state"><span class="spinner"></span> Loading...</div></td></tr>
+            </tbody>
+            <tfoot id="summaryFoot"></tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="../assets/js/config.js"></script>
+<script src="../assets/js/layout.js"></script>
+<script>
+  Auth.requireAuth(['admin','product_lead','operator','viewer']);
+  buildLayout('monthly');
+
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  let tableData = [];
+
+  function buildSelects() {
+    const today = new Date();
+    const mSel = document.getElementById('monthSel');
+    months.forEach((m, i) => mSel.add(new Option(m, i+1)));
+    // Restore persisted month or default to current month
+    const savedMonth = sessionStorage.getItem('mahle_month');
+    mSel.value = savedMonth || (today.getMonth() + 1);
+
+    const ySel = document.getElementById('yearSel');
+    for (let y = today.getFullYear(); y >= today.getFullYear()-3; y--) ySel.add(new Option(y, y));
+    const savedYear = sessionStorage.getItem('mahle_year');
+    ySel.value = savedYear || today.getFullYear();
+
+    // Persist on change
+    mSel.addEventListener('change', () => sessionStorage.setItem('mahle_month', mSel.value));
+    ySel.addEventListener('change', () => sessionStorage.setItem('mahle_year', ySel.value));
+  }
+
+  async function loadSummary() {
+    const month = parseInt(document.getElementById('monthSel').value);
+    const year  = parseInt(document.getElementById('yearSel').value);
+
+    document.getElementById('summaryBody').innerHTML  = '<tr><td colspan="10"><div class="loading-state"><span class="spinner"></span> Loading...</div></td></tr>';
+    document.getElementById('summaryFoot').innerHTML = '';
+
+    // Build date range for the selected month
+    const fromDate = `${year}-${String(month).padStart(2,'0')}-01`;
+    const toMonth  = month === 12 ? `${year+1}-01-01` : `${year}-${String(month+1).padStart(2,'0')}-01`;
+    // toDate is last day of month (use lt toMonth in backend, so we pass day before)
+    const lastDay = new Date(toMonth); lastDay.setDate(lastDay.getDate()-1);
+    const toDate  = lastDay.toISOString().split('T')[0];
+
+    try {
+      // Fetch both summary rows and raw entries in parallel
+      const [summaryRows, rawEntries] = await Promise.all([
+        API.get(`/api/analytics/monthly-summary?month=${month}&year=${year}`),
+        API.get(`/api/production/entries?from=${fromDate}&to=${toDate}`).catch(() => [])
+      ]);
+
+      // ── FIX 4 & 5: recompute days (unique dates) and manpower (peak, not summed) ──
+      // Build a correction map keyed by line_id::model_id
+      const corrMap = {};
+      rawEntries.forEach(e => {
+        const key = `${e.line_id}::${e.model_id}`;
+        if (!corrMap[key]) corrMap[key] = { dates: new Set(), maxMP: 0 };
+        corrMap[key].dates.add(e.date);                                        // unique calendar dates
+        corrMap[key].maxMP = Math.max(corrMap[key].maxMP, e.manpower || 0);    // peak crew, not additive
+      });
+
+      summaryRows.forEach(row => {
+        const key = `${row.line_id}::${row.model_id}`;
+        if (corrMap[key]) {
+          row.days           = corrMap[key].dates.size;   // FIX 4: unique calendar dates
+          row.total_manpower = corrMap[key].maxMP;        // FIX 5: peak crew, not summed
+          // UPMD = total output / crew size.
+          // Manpower is the SAME crew every hour/day — do NOT divide by days or hours.
+          // e.g. 300 output, 10 manpower => UPMD = 30. Same as hourly: 32 output, 10 mp => 3.2
+          row.units_per_man_day = corrMap[key].maxMP > 0
+            ? (row.total_output / corrMap[key].maxMP).toFixed(1)
+            : '—';
+        }
+      });
+
+      tableData = summaryRows;
+      renderSummary(tableData);
+    } catch (e) {
+      document.getElementById('summaryBody').innerHTML = 
+        '<tr><td colspan="10"><div class="empty-state"><div class="empty-state-icon">⚠</div>' +
+        '<div class="empty-state-title">Failed to load — server may be starting up</div>' +
+        '<div style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="loadSummary()">Retry</button></div>' +
+        '</div></td></tr>';
+      showToast('Failed to load summary — tap Retry when ready', 'error');
+    }
+  }
+
+  function renderSummary(data) {
+    if (!data.length) {
+      document.getElementById('summaryBody').innerHTML = '<tr><td colspan="10"><div class="empty-state"><div class="empty-state-icon">📭</div><div class="empty-state-title">No production data for this month</div></div></td></tr>';
+      ['sOutput','sTarget','sEff','sUPMD','sLines'].forEach(id => document.getElementById(id).textContent = '—');
+      return;
+    }
+
+    const totOutput   = data.reduce((a,r) => a + r.total_output, 0);
+    const totTarget   = data.reduce((a,r) => a + r.total_target, 0);
+    const avgEff      = totTarget ? ((totOutput / totTarget) * 100).toFixed(1) : '0.0';
+    // Overall UPMD = grand total output / average crew size across all lines
+    const totalMP   = data.reduce((a,r) => a + (parseFloat(r.total_manpower)||0), 0);
+    const avgUPMD   = totalMP > 0 ? (totOutput / totalMP).toFixed(1) : '—';
+    const activeLines = new Set(data.map(r => r.line_name)).size;
+
+    document.getElementById('sOutput').textContent = totOutput.toLocaleString();
+    document.getElementById('sTarget').textContent = totTarget.toLocaleString();
+    document.getElementById('sEff').textContent    = avgEff + '%';
+    document.getElementById('sUPMD').textContent   = avgUPMD;
+    document.getElementById('sLines').textContent  = activeLines;
+
+    document.getElementById('summaryBody').innerHTML = data.map((row, i) => {
+      const eff   = parseFloat(row.efficiency);
+      const color = efficiencyColor(eff);
+      const gap   = row.total_output - row.total_target;
+      return `<tr>
+        <td>${i+1}</td>
+        <td><strong>${row.line_name}</strong></td>
+        <td>${row.model_name}</td>
+        <td class="num" style="text-align:center">${row.days ?? row.days_recorded}</td>
+        <td class="num">${row.total_target.toLocaleString()}</td>
+        <td class="num">${row.total_output.toLocaleString()}</td>
+        <td class="num" style="color:${gap<0?'var(--red)':'var(--green)'}">
+          ${gap >= 0 ? '+'+gap.toLocaleString() : gap.toLocaleString()}
+        </td>
+        <td><span class="eff-pill" style="background:${color}18;color:${color}">${eff.toFixed(1)}%</span></td>
+        <td class="num">${row.total_manpower}</td>
+        <td class="num">${row.units_per_man_day}</td>
+      </tr>`;
+    }).join('');
+
+    const footEff = totTarget ? ((totOutput/totTarget)*100).toFixed(1) : '—';
+    document.getElementById('summaryFoot').innerHTML = `<tr>
+      <td colspan="3">TOTAL</td>
+      <td class="num" style="text-align:center">—</td>
+      <td class="num">${totTarget.toLocaleString()}</td>
+      <td class="num">${totOutput.toLocaleString()}</td>
+      <td class="num" style="color:${(totOutput-totTarget)<0?'var(--red)':'var(--green)'}">
+        ${totOutput-totTarget>=0?'+':''}${(totOutput-totTarget).toLocaleString()}
+      </td>
+      <td><span class="eff-pill" style="background:${efficiencyColor(footEff)}18;color:${efficiencyColor(footEff)}">${footEff}%</span></td>
+      <td class="num">—</td>
+      <td class="num">${avgUPMD}</td>
+    </tr>`;
+  }
+
+  function exportCSV() {
+    if (!tableData.length) { showToast('No data to export','error'); return; }
+    const month = document.getElementById('monthSel').options[document.getElementById('monthSel').selectedIndex].text;
+    const year  = document.getElementById('yearSel').value;
+    const headers = ['#','Line','Model','Days (distinct)','Total Target','Total Output','Gap','Efficiency %','Manpower (peak)','Units/ManDay'];
+    const rows = tableData.map((r,i) => [i+1,r.line_name,r.model_name,r.days,r.total_target,r.total_output,r.total_output-r.total_target,r.efficiency,r.total_manpower,r.units_per_man_day]);
+    const csv  = [headers,...rows].map(r=>r.join(',')).join('\n');
+    const a    = document.createElement('a');
+    a.href     = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+    a.download = `MAHLE_Monthly_${month}_${year}.csv`;
+    a.click(); showToast('CSV exported','success');
+  }
+
+  buildSelects();
+  loadSummary();
+</script>
+</body>
+</html>

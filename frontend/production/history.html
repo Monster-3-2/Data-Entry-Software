@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Entry History — MAHLE Production</title>
+  <link rel="stylesheet" href="../assets/css/main.css"/>
+  <style>
+    .app-layout { display: flex; min-height: 100vh; }
+    .main-content { margin-left: var(--sidebar-width); flex: 1; display: flex; flex-direction: column; }
+    .gap-col { color: var(--text-muted); font-family: var(--font-mono); font-size: 0.8rem; }
+    .eff-cell { font-family: var(--font-condensed); font-weight: 700; font-size: 0.95rem; }
+    .filter-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
+    .filter-bar .form-control { font-size: 0.82rem; }
+    .filter-label { font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+    .filter-group { display: flex; align-items: center; gap: 6px; }
+    .filter-divider { width: 1px; height: 28px; background: var(--border); margin: 0 4px; }
+    /* Downtime edit modal mode toggle */
+    .dt-mode-toggle { display:inline-flex; background:var(--bg); border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+    .dt-mode-btn { padding:4px 12px; font-size:0.75rem; font-weight:700; cursor:pointer; border:none; background:transparent; color:var(--text-muted); transition:all 0.15s; letter-spacing:0.03em; }
+    .dt-mode-btn.active { background:var(--mahle-blue); color:#fff; }
+  </style>
+</head>
+<body>
+<!-- Wake-up overlay — shown while backend is cold-starting -->
+<div id="wakeOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,30,60,0.88);flex-direction:column;align-items:center;justify-content:center;gap:16px">
+  <div style="width:52px;height:52px;border:4px solid rgba(255,255,255,0.15);border-top-color:#E87722;border-radius:50%;animation:spin 1s linear infinite"></div>
+  <div style="color:#fff;font-family:Barlow,sans-serif;font-size:1.1rem;font-weight:700">Server is starting up…</div>
+  <div style="color:rgba(255,255,255,0.6);font-size:0.85rem;font-family:Barlow,sans-serif;text-align:center;max-width:300px">Render free tier sleeps after inactivity.<br>Usually ready in 20–40 seconds.</div>
+  <div id="wakeTimer" style="color:#E87722;font-family:monospace;font-size:1rem;font-weight:700">0s</div>
+</div>
+<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+<div class="app-layout">
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-title">Entry History</div>
+      <div class="topbar-actions">
+      <button class="btn btn-ghost btn-sm" onclick="downloadReport()">⬇ Download Report</button>
+      <a href="/production/entry.html" class="btn btn-orange btn-sm">+ New Entry</a>
+    </div>
+    </div>
+
+    <div class="page-content">
+      <!-- Filters -->
+      <div class="filter-bar">
+        <div class="filter-group">
+          <span class="filter-label">Date</span>
+          <input type="date" class="form-control" id="filterFrom" style="width:145px"/>
+          <span style="color:var(--text-muted);font-size:0.8rem">→</span>
+          <input type="date" class="form-control" id="filterTo" style="width:145px"/>
+        </div>
+        <div class="filter-divider"></div>
+        <div class="filter-group">
+          <span class="filter-label">Line</span>
+          <select class="form-control" id="filterLine" style="width:130px">
+            <option value="">All Lines</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <span class="filter-label">Shift</span>
+          <select class="form-control" id="filterShift" style="width:150px">
+            <option value="">All Shifts</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <span class="filter-label">Model</span>
+          <select class="form-control" id="filterModel" style="width:130px">
+            <option value="">All Models</option>
+          </select>
+        </div>
+        <div class="filter-divider"></div>
+        <button class="btn btn-primary btn-sm" onclick="loadHistory()">Apply</button>
+        <button class="btn btn-ghost btn-sm" onclick="clearFilters()">Clear</button>
+        <span style="margin-left:auto;font-size:0.82rem;color:var(--text-muted)" id="recordCount"></span>
+      </div>
+
+      <div class="card">
+        <div class="table-wrapper">
+          <table id="historyTable">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Line</th>
+                <th>Model</th>
+                <th>Shift / Hour</th>
+                <th>Target</th>
+                <th>Output</th>
+                <th>Gap</th>
+                <th>Efficiency</th>
+                <th>Manpower</th>
+                <th>Units/Person</th>
+                <th>Downtime</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="historyBody">
+              <tr><td colspan="12"><div class="loading-state"><span class="spinner"></span> Loading...</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Downtime Edit Modal -->
+<div class="modal-overlay" id="downtimeEditModal">
+  <div class="modal" style="max-width:600px;width:95%">
+    <div class="modal-header">
+      <div class="modal-title">Edit Downtime Entries</div>
+      <button class="modal-close" onclick="closeDowntimeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="downtimeEditBody" style="max-height:70vh;overflow-y:auto"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeDowntimeModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Entry edit removed -->
+
+<script src="../assets/js/config.js"></script>
+<script src="../assets/js/layout.js"></script>
+<script>
+  Auth.requireAuth(['admin','product_lead','operator']);
+  buildLayout('history');
+</script>
+<script>
+  const user    = Auth.getUser();
+  const isAdmin = user.role === 'admin';
+  const isPL    = user.role === 'product_lead';
+  const _rowCache = {}; // keyed by entry id — avoids JSON.stringify in onclick
+
+  // ── Shared date state ──
+  document.getElementById('filterFrom').value = DateState.getFrom();
+  document.getElementById('filterTo').value   = DateState.getTo();
+  document.getElementById('filterFrom').addEventListener('change', function() { DateState.setFrom(this.value); });
+  document.getElementById('filterTo').addEventListener('change',   function() { DateState.setTo(this.value); });
+
+  // ── Init: load lines, shifts, models in parallel ──
+  async function init() {
+    try {
+      const [lines, shifts, models] = await Promise.all([
+        API.get('/api/master/lines'),
+        API.get('/api/master/shifts'),
+        API.get('/api/master/models').catch(() => []),
+      ]);
+
+      const lineSel = document.getElementById('filterLine');
+      const shiftSel = document.getElementById('filterShift');
+      const modelSel = document.getElementById('filterModel');
+
+      if(lineSel) lines.forEach(l  => lineSel.add(new Option(l.name, l.id)));
+      if(shiftSel) shifts.forEach(s => shiftSel.add(new Option(`${s.name} (${s.start_time})`, s.id)));
+      if(modelSel) models.forEach(m => modelSel.add(new Option(m.name, m.id)));
+
+      loadHistory();
+    } catch (err) {
+      console.error("Initialization failed:", err);
+      document.getElementById('historyBody').innerHTML =
+        '<tr><td colspan="12"><div class="empty-state"><div class="empty-state-icon">⚠</div>' +
+        '<div class="empty-state-title">Server starting up — please wait</div>' +
+        '<div style="margin-top:8px"><button class="btn btn-primary btn-sm" onclick="init()">Retry</button></div>' +
+        '</div></td></tr>';
+      showToast('Server starting up, retrying in 5s…', 'error');
+      setTimeout(init, 5000);
+    }
+  }
+
+  // ── Build query from all active filters ──
+  function buildQuery() {
+    const from    = document.getElementById('filterFrom').value;
+    const to      = document.getElementById('filterTo').value;
+    const lineId  = document.getElementById('filterLine').value;
+    const shiftId = document.getElementById('filterShift').value;
+    const modelId = document.getElementById('filterModel').value;
+
+    const params = new URLSearchParams();
+    if (from)    params.set('from', from);
+    if (to)      params.set('to', to);
+    if (lineId)  params.set('line_id', lineId);
+    if (shiftId) params.set('shift_id', shiftId);
+    if (modelId) params.set('model_id', modelId);
+    return '?' + params.toString();
+  }
+
+  // Cache handled by config.js (multi-tier TTL via API.request patch)
+
+  async function loadHistory() {
+    const q = buildQuery();
+    const tbody = document.getElementById('historyBody');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '<tr><td colspan="12"><div class="loading-state"><span class="spinner"></span> Loading...</div></td></tr>';
+    try {
+      const data = await API.get('/api/production/entries' + q);
+      const countEl = document.getElementById('recordCount');
+      if (countEl) {
+        countEl.textContent = `${data.length} record${data.length !== 1 ? 's' : ''}`;
+      }
+      renderTable(data);
+    } catch (e) {
+      showToast('Failed to load history', 'error');
+    }
+  }
+  let _lastHistoryData = [];
+
+  // Patch renderTable to cache data for export
+  const _origRenderTable = renderTable;
+  renderTable = function(data) {
+    _lastHistoryData = data;
+    _origRenderTable(data);
+  };
+  
+  function downloadReport() {
+    if (!_lastHistoryData.length) { showToast('No data to export', 'error'); return; }
+  
+    const headers = ['Date','Line','Model','Shift','Target','Output','Gap','Efficiency %','Manpower','Units/Person','Total Downtime (min)','Downtime Reasons & Remarks'];
+    const csvRows = [headers.join(',')];
+  
+    _lastHistoryData.forEach(row => {
+      const eff  = efficiency(row.output, row.target);
+      const gap  = row.output - row.target;
+      const upmd = row.manpower ? (row.output / row.manpower).toFixed(1) : '';
+      const dtBreakdown = (row.downtime_detail || [])
+        .map(d => `${d.reason} (${d.duration_minutes}min)${d.remarks ? ' - ' + d.remarks : ''}`)
+        .join(' | ');
+  
+      const csvRow = [
+        fmtDate(row.date),
+        row.line_name,
+        row.model_name || '',
+        row.shift_name || '',
+        row.target,
+        row.output,
+        gap,
+        eff,
+        row.manpower,
+        upmd,
+        row.total_downtime_mins || 0,
+        `"${dtBreakdown.replace(/"/g, '""')}"`
+      ];
+      csvRows.push(csvRow.join(','));
+    });
+  
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `production-report-${DateState.getFrom()}_to_${DateState.getTo()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Report downloaded', 'success');
+  }
+  // Renders the downtime cell — avoids nested template literal syntax error
+  function renderDowntimeCell(row, isPL, isAdmin) {
+    if (!row.total_downtime_mins || row.total_downtime_mins <= 0) {
+      return '<span style="color:var(--text-muted)">—</span>';
+    }
+    let html = '<div style="font-weight:700;color:var(--red);font-family:var(--font-mono);font-size:0.85rem">'
+      + row.total_downtime_mins + ' min</div>';
+    const details = row.downtime_detail || [];
+    details.forEach(function(d) {
+      const timeStr = (d.start_time && d.end_time)
+        ? ' <span style="color:var(--text-muted);font-size:0.72rem">(' + d.start_time + '–' + d.end_time + ')</span>'
+        : '';
+      const remarkStr = d.remarks
+        ? '<span style="color:var(--text-muted);font-style:italic;font-size:0.72rem"> — ' + d.remarks + '</span>'
+        : '';
+      html += '<div style="font-size:0.76rem;color:var(--text-muted);padding-top:2px">'
+        + (d.reason || '—') + timeStr + remarkStr + '</div>';
+    });
+    if ((isPL || isAdmin) && details.length) {
+      html += '<button class="btn btn-ghost btn-sm" style="margin-top:4px;font-size:0.72rem"'
+            + ' data-entry-id="' + row.id + '"'
+            + ' onclick="openDowntimeEditById(this.dataset.entryId)">'
+            + 'Edit DT</button>';
+    }
+    return html;
+  }
+
+  function renderTable(data) {
+    const tbody = document.getElementById('historyBody');
+    if (!tbody) return;
+
+    if (!data.length) {
+      tbody.innerHTML = '<tr><td colspan="12"><div class="empty-state"><div class="empty-state-icon">📭</div><div class="empty-state-title">No entries found</div></div></td></tr>';
+      return;
+    }
+
+    const todayStr = DateState._today();
+  const sevenDaysAgo = DateState._daysAgo(7);
+  // Cache rows by id so onclick can look them up safely
+  data.forEach(function(r) { _rowCache[r.id] = r; });
+
+  const rows = data.map(row => {
+      const eff   = efficiency(row.output, row.target);
+      const color = efficiencyColor(eff);
+      const gap   = row.output - row.target;
+      const upmd  = row.manpower ? (row.output / row.manpower).toFixed(1) : '—';
+      const isAdmin = user.role === 'admin';
+      const isPL    = user.role === 'product_lead';
+      const isOp    = user.role === 'operator';
+
+      // Edit: admin always; product_lead own entries today; operator cannot edit
+      const canEdit = isAdmin
+        || (isPL && row.entered_by === user.id && row.date === todayStr)
+        || (isOp && row.entered_by === user.id && row.date === todayStr);
+
+      // Delete: admin always; product_lead last 7 days; operator own entries today only
+      const canDelete = isAdmin
+        || (isPL && row.date >= sevenDaysAgo)
+        || (isOp && row.entered_by === user.id && row.date === todayStr);
+
+      return `<tr>
+        <td>${fmtDate(row.date)}</td>
+        <td><strong>${row.line_name}</strong></td>
+        <td style="color:var(--mahle-blue);font-weight:600">${row.model_name || '—'}</td>
+        <td>${row.shift_name || '—'}</td>
+        <td style="font-family:var(--font-mono)">${row.target.toLocaleString()}</td>
+        <td style="font-family:var(--font-mono)">${row.output.toLocaleString()}</td>
+        <td class="gap-col">${gap >= 0 ? '+'+gap : gap}</td>
+        <td class="eff-cell" style="color:${color}">${eff}%</td>
+        <td>${row.manpower}</td>
+        <td style="font-family:var(--font-mono)">${upmd}</td>
+        <td>
+          ${renderDowntimeCell(row, isPL, isAdmin)}
+        </td>
+        <td>
+          ${canDelete ? `<button class="btn btn-danger btn-sm" onclick="deleteEntry('${row.id}')">Del</button>` : '<span style="color:var(--text-muted);font-size:0.78rem">—</span>'}
+        </td>
+      </tr>`;
+    });
+    tbody.innerHTML = rows.join('');
+  }
+
+
+
+
+
+  async function deleteEntry(id) {
+    showConfirm('This production entry will be permanently removed.', async () => {
+      try {
+        await API.delete(`/api/production/entries/${id}`);
+        showToast('Entry deleted', 'success');
+        loadHistory();
+      } catch (e) { showToast(e.message || 'Delete failed', 'error'); }
+    }, { title: 'Delete Entry?', confirmLabel: 'Delete', type: 'danger' });
+  }
+
+  function clearFilters() {
+    const f = DateState._daysAgo(7);
+    const t = DateState._today();
+    document.getElementById('filterFrom').value  = f;
+    document.getElementById('filterTo').value    = t;
+    document.getElementById('filterLine').value  = '';
+    document.getElementById('filterShift').value = '';
+    document.getElementById('filterModel').value = '';
+    DateState.setFrom(f); DateState.setTo(t);
+    loadHistory();
+  }
+
+  function openDowntimeModal() { document.getElementById('downtimeEditModal').classList.add('open'); }
+  function closeDowntimeModal() { document.getElementById('downtimeEditModal').classList.remove('open'); }
+
+  let _reasons = [];
+  async function ensureReasons() {
+    if (!_reasons.length) _reasons = await API.get('/api/master/reasons');
+  }
+
+  function openDowntimeEditById(id) {
+    const row = _rowCache[id];
+    if (!row) { showToast('Entry not found in cache — refresh page', 'error'); return; }
+    openDowntimeEdit(row);
+  }
+
+  async function openDowntimeEdit(row) {
+    await ensureReasons();
+    const entryId = row.id;
+
+    let dtFull = [];
+    try { dtFull = await API.get('/api/production/entries/' + entryId + '/downtime'); } catch {}
+
+    function buildReasonOpts(selectedReason) {
+      return _reasons.map(function(r) {
+        return '<option value="' + r.id + '"' + (r.reason === selectedReason ? ' selected' : '') + '>' + r.reason + '</option>';
+      }).join('');
+    }
+
+    if (!dtFull.length) {
+      document.getElementById('downtimeEditBody').innerHTML =
+        '<div style="padding:20px;text-align:center;color:var(--text-muted)">No downtime records for this entry.</div>';
+    } else {
+      document.getElementById('downtimeEditBody').innerHTML = dtFull.map(function(d) {
+        const reason = (d.downtime_reasons || {}).reason || '';
+        const st  = d.start_time || '';
+        const et  = d.end_time   || '';
+        const rm  = d.remarks    || '';
+        const dm  = d.duration_minutes || 0;
+        // Determine initial mode: if has time range use range, else duration
+        const initMode = (st && et) ? 'range' : 'duration';
+        const durLabel = st && et ? calcDurText(st, et) : (dm ? dm + ' min' : '—');
+        return '<div class="card" style="padding:14px;margin-bottom:12px;border-radius:var(--radius-lg)" data-dt-id="' + d.id + '" data-mode="' + initMode + '">' +
+
+          // Reason row
+          '<div style="margin-bottom:10px">' +
+            '<label style="font-size:0.68rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:0.04em;display:block;margin-bottom:4px">Downtime Reason</label>' +
+            '<select class="form-control dt-reason">' +
+              buildReasonOpts(reason) +
+            '</select>' +
+          '</div>' +
+
+          // Mode toggle
+          '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">' +
+            '<span style="font-size:0.72rem;color:var(--text-muted);font-weight:600">Entry mode:</span>' +
+            '<div class="dt-mode-toggle">' +
+              '<button class="dt-mode-btn' + (initMode==='range'?' active':'') + '" onclick="setEditDTMode(this,\'range\')" type="button">From → To</button>' +
+              '<button class="dt-mode-btn' + (initMode==='duration'?' active':'') + '" onclick="setEditDTMode(this,\'duration\')" type="button">Minutes</button>' +
+            '</div>' +
+            '<span class="dt-dur-display-inline" style="font-size:0.8rem;color:var(--mahle-blue);font-weight:700;margin-left:auto">' + durLabel + '</span>' +
+          '</div>' +
+
+          // Time-range fields
+          '<div class="edt-mode-range" style="display:' + (initMode==='range'?'grid':'none') + ';grid-template-columns:120px 120px;gap:10px;margin-bottom:10px">' +
+            '<div><label style="font-size:0.68rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px">From</label>' +
+              '<input type="time" class="form-control dt-start" value="' + st + '" oninput="calcEditDTDur(this)"/>' +
+            '</div>' +
+            '<div><label style="font-size:0.68rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px">To</label>' +
+              '<input type="time" class="form-control dt-end" value="' + et + '" oninput="calcEditDTDur(this)"/>' +
+            '</div>' +
+          '</div>' +
+
+          // Duration-only fields
+          '<div class="edt-mode-duration" style="display:' + (initMode==='duration'?'grid':'none') + ';grid-template-columns:120px 130px;gap:10px;margin-bottom:10px">' +
+            '<div><label style="font-size:0.68rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px">Start Time (opt)</label>' +
+              '<input type="time" class="form-control edt-dur-start" value="' + st + '"/>' +
+            '</div>' +
+            '<div><label style="font-size:0.68rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px">Duration (minutes)</label>' +
+              '<input type="number" class="form-control edt-minutes" value="' + (dm||'') + '" min="1" max="480" placeholder="e.g. 14" style="font-weight:700;font-size:1rem"/>' +
+            '</div>' +
+          '</div>' +
+
+          // Remarks
+          '<div style="margin-bottom:10px">' +
+            '<label style="font-size:0.68rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:0.04em;display:block;margin-bottom:4px">Remarks</label>' +
+            '<input type="text" class="form-control dt-remarks" value="' + rm.replace(/"/g, '&quot;') + '" placeholder="Optional notes…"/>' +
+          '</div>' +
+
+          '<div style="text-align:right">' +
+            '<button class="btn btn-primary btn-sm" onclick="saveDTRow(this)">Save Changes</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    }
+    openDowntimeModal();
+  }
+
+  function setEditDTMode(btn, mode) {
+    const card = btn.closest('[data-dt-id]');
+    card.dataset.mode = mode;
+    card.querySelectorAll('.dt-mode-btn').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    card.querySelector('.edt-mode-range').style.display    = mode === 'range'    ? 'grid' : 'none';
+    card.querySelector('.edt-mode-duration').style.display = mode === 'duration' ? 'grid' : 'none';
+  }
+
+  function calcEditDTDur(el) {
+    const card   = el.closest('[data-dt-id]');
+    const st     = card.querySelector('.dt-start')?.value;
+    const et     = card.querySelector('.dt-end')?.value;
+    const disp   = card.querySelector('.dt-dur-display-inline');
+    if (disp) disp.textContent = (st && et) ? calcDurText(st, et) : '—';
+  }
+
+  function calcDurText(st, et) {
+    const toMin = t => { const [h, m] = t.split(':').map(Number); return h*60+m; };
+    let d = toMin(et) - toMin(st); if (d < 0) d += 1440;
+    const h = Math.floor(d/60), m = d%60;
+    return h > 0 ? `Duration: ${h}h ${m}m` : `Duration: ${m} min`;
+  }
+
+  function calcDTDur(el) {
+    const card = el.closest('[data-dt-id]');
+    const st = card.querySelector('.dt-start').value;
+    const et = card.querySelector('.dt-end').value;
+    const disp = card.querySelector('.dt-dur-display');
+    disp.textContent = (st && et) ? calcDurText(st, et) : '';
+  }
+
+  async function saveDTRow(btn) {
+    const card   = btn.closest('[data-dt-id]');
+    const dtId   = card.dataset.dtId;
+    const mode   = card.dataset.mode || 'range';
+    const toMin  = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+    const pad    = n => String(n).padStart(2, '0');
+
+    let startTime = null, endTime = null, durationMins = null;
+
+    if (mode === 'range') {
+      startTime    = card.querySelector('.dt-start')?.value || null;
+      endTime      = card.querySelector('.dt-end')?.value   || null;
+      if (startTime && endTime) {
+        let diff = toMin(endTime) - toMin(startTime);
+        if (diff < 0) diff += 1440;
+        durationMins = diff;
+      }
+    } else {
+      // duration mode
+      const minsVal    = parseInt(card.querySelector('.edt-minutes')?.value || '0');
+      const durStart   = card.querySelector('.edt-dur-start')?.value || null;
+      durationMins     = minsVal || null;
+      if (durStart && minsVal) {
+        const total = toMin(durStart) + minsVal;
+        startTime = durStart;
+        endTime   = pad(Math.floor((total % 1440) / 60)) + ':' + pad(total % 60);
+      }
+    }
+
+    const body = {
+      reason_id:        card.querySelector('.dt-reason').value,
+      start_time:       startTime,
+      end_time:         endTime,
+      duration_minutes: durationMins,
+      remarks:          card.querySelector('.dt-remarks').value.trim() || null,
+    };
+
+    try {
+      await API.put('/api/production/downtime/' + dtId, body);
+      showToast('Downtime updated', 'success');
+      closeDowntimeModal();
+      loadHistory();
+    } catch (e) { showToast(e.message || 'Update failed', 'error'); }
+  }
+
+  // Show overlay while server wakes, hide once ready
+  (async () => {
+    const overlay   = document.getElementById('wakeOverlay');
+    const timerEl   = document.getElementById('wakeTimer');
+    let   elapsed   = 0;
+    let   timerInt  = null;
+
+    // Only show overlay if server not already ready
+    if (!API._ready) {
+      overlay.style.display = 'flex';
+      timerInt = setInterval(() => { elapsed += 1; if (timerEl) timerEl.textContent = elapsed + 's'; }, 1000);
+    }
+
+    try {
+      await API._ensureReady();
+    } finally {
+      clearInterval(timerInt);
+      overlay.style.display = 'none';
+    }
+
+    init();
+  })();
+</script>
+</body>
+</html>

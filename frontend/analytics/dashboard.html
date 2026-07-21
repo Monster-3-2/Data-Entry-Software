@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Analytics — MAHLE Production</title>
+  <link rel="stylesheet" href="../assets/css/main.css"/>
+  <style>
+    .app-layout { display: flex; min-height: 100vh; }
+    .main-content { margin-left: var(--sidebar-width); flex: 1; display: flex; flex-direction: column; }
+    .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .chart-full { grid-column: 1 / -1; }
+    .chart-container { height: 280px; }
+    .chart-container-sm { height: 230px; }
+    .metric-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+    .metric-chip {
+      flex: 1; min-width: 150px;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 14px 18px;
+      box-shadow: var(--shadow-sm);
+    }
+    .metric-chip-val { font-family: var(--font-condensed); font-size: 2rem; font-weight: 700; line-height: 1; }
+    .metric-chip-label { font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; margin-top: 4px; }
+
+    /* Filter bar */
+    .filter-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 20px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 12px 16px; }
+    .filter-row .form-control { font-size: 0.82rem; }
+    .filter-label { font-size: 0.7rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+    .filter-group { display: flex; align-items: center; gap: 6px; }
+    .filter-divider { width: 1px; height: 26px; background: var(--border); margin: 0 6px; }
+
+    /* Period tabs */
+    .period-tabs { display: flex; gap: 4px; }
+    .period-tab {
+      padding: 5px 12px; border-radius: var(--radius); border: 1px solid var(--border);
+      background: transparent; cursor: pointer; font-size: 0.78rem; font-weight: 600;
+      color: var(--text-muted); transition: all 0.15s;
+    }
+    .period-tab.active { background: var(--mahle-blue); color: white; border-color: var(--mahle-blue); }
+    .period-tab:hover:not(.active) { border-color: var(--mahle-blue-light); color: var(--mahle-blue); }
+
+    .eff-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    .eff-table th { text-align: left; padding: 8px 12px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); font-weight: 600; border-bottom: 2px solid var(--border); }
+    .eff-table td { padding: 9px 12px; border-bottom: 1px solid var(--border); }
+    .eff-table tr:last-child td { border-bottom: none; }
+
+    /* Summary table for shift/hour views */
+    .breakdown-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .breakdown-table th { padding: 8px 12px; font-size: 0.72rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; border-bottom: 2px solid var(--border); text-align: left; }
+    .breakdown-table td { padding: 9px 12px; border-bottom: 1px solid var(--border); font-family: var(--font-mono); font-size: 0.82rem; }
+    .breakdown-table td:first-child { font-family: var(--font-body); font-weight: 600; }
+
+    .loading-overlay { display: flex; align-items: center; justify-content: center; height: 200px; }
+  </style>
+</head>
+<body>
+<div id="wakeOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,30,60,0.88);flex-direction:column;align-items:center;justify-content:center;gap:16px">
+  <div style="width:52px;height:52px;border:4px solid rgba(255,255,255,0.15);border-top-color:#E87722;border-radius:50%;animation:spin 1s linear infinite"></div>
+  <div style="color:#fff;font-family:Barlow,sans-serif;font-size:1.1rem;font-weight:700">Server is starting up…</div>
+  <div style="color:rgba(255,255,255,0.6);font-size:0.85rem;font-family:Barlow,sans-serif;text-align:center;max-width:300px">Render free tier sleeps after inactivity.<br>Usually ready in 20–40 seconds.</div>
+  <div id="wakeTimer" style="color:#E87722;font-family:monospace;font-size:1rem;font-weight:700">0s</div>
+</div>
+<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+<div class="app-layout">
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-title">Analytics & Performance</div>
+    </div>
+
+    <div class="page-content">
+
+      <!-- ── Filter bar ── -->
+      <div class="filter-row">
+        <!-- Period tabs -->
+        <div class="filter-group">
+          <span class="filter-label">View</span>
+          <div class="period-tabs">
+            <button class="period-tab" data-p="hourly"   onclick="setPeriod('hourly')">Hourly</button>
+            <button class="period-tab" data-p="shiftwise" onclick="setPeriod('shiftwise')">Shift</button>
+            <button class="period-tab" data-p="daily"    onclick="setPeriod('daily')">Daily</button>
+            <button class="period-tab active" data-p="weekly"  onclick="setPeriod('weekly')">Weekly</button>
+            <button class="period-tab" data-p="monthly"  onclick="setPeriod('monthly')">Monthly</button>
+          </div>
+        </div>
+        <div class="filter-divider"></div>
+        <!-- Date range -->
+        <div class="filter-group">
+          <span class="filter-label">From</span>
+          <input type="date" class="form-control" id="fromDate" style="width:145px"/>
+        </div>
+        <div class="filter-group">
+          <span class="filter-label">To</span>
+          <input type="date" class="form-control" id="toDate" style="width:145px"/>
+        </div>
+        <div class="filter-divider"></div>
+        <!-- Drilldown filters -->
+        <div class="filter-group">
+          <span class="filter-label">Line</span>
+          <select class="form-control" id="lineFilter" style="width:130px">
+            <option value="">All Lines</option>
+          </select>
+        </div>
+        <div class="filter-group" id="shiftFilterGroup">
+          <span class="filter-label">Shift</span>
+          <select class="form-control" id="shiftFilter" style="width:150px">
+            <option value="">All Shifts</option>
+          </select>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="loadAll()">Apply</button>
+      </div>
+
+      <!-- ── KPI Row ── -->
+      <div class="metric-row" id="metricRow">
+        <div class="metric-chip"><div class="metric-chip-val" id="mOutput" style="color:var(--mahle-blue-light)">—</div><div class="metric-chip-label">Total Output</div></div>
+        <div class="metric-chip"><div class="metric-chip-val" id="mTarget" style="color:var(--mahle-orange)">—</div><div class="metric-chip-label">Total Target</div></div>
+        <div class="metric-chip"><div class="metric-chip-val" id="mEff">—</div><div class="metric-chip-label">Overall Efficiency</div></div>
+        <div class="metric-chip"><div class="metric-chip-val" id="mUPMD" style="color:var(--green)">—</div><div class="metric-chip-label">Units / Person</div></div>
+        <div class="metric-chip"><div class="metric-chip-val" id="mDT" style="color:var(--red)">—</div><div class="metric-chip-label">Downtime (min)</div></div>
+      </div>
+
+      <div class="charts-grid">
+
+        <!-- Trend chart — full width, label changes with period -->
+        <div class="card chart-full">
+          <div class="card-header"><div class="card-title" id="trendTitle">Output Trend</div></div>
+          <div class="card-body"><div class="chart-container"><canvas id="trendChart"></canvas></div></div>
+        </div>
+
+        <!-- Target vs Output per line -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">Target vs Output by Line</div></div>
+          <div class="card-body"><div class="chart-container-sm"><canvas id="lineChart"></canvas></div></div>
+        </div>
+
+        <!-- Downtime Pareto -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">Downtime Pareto</div></div>
+          <div class="card-body"><div class="chart-container-sm"><canvas id="downtimeChart"></canvas></div></div>
+        </div>
+
+        <!-- Units per Person by Line -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">Units / Person by Line</div></div>
+          <div class="card-body"><div class="chart-container-sm"><canvas id="manpowerChart"></canvas></div></div>
+        </div>
+
+        <!-- Efficiency & Productivity table -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">Efficiency & Productivity</div></div>
+          <div class="card-body" style="padding:0">
+            <table class="eff-table">
+              <thead><tr><th>Line</th><th>Output</th><th>Target</th><th>Efficiency</th><th>U/Person</th></tr></thead>
+              <tbody id="effBody"><tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted)">Loading...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Shift/Hour breakdown table — shown for shiftwise & hourly views -->
+        <div class="card chart-full" id="breakdownCard" style="display:none">
+          <div class="card-header"><div class="card-title" id="breakdownTitle">Shift Breakdown</div></div>
+          <div class="card-body" style="padding:0">
+            <table class="breakdown-table">
+              <thead id="breakdownHead"></thead>
+              <tbody id="breakdownBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/config.js"></script>
+<script src="../assets/js/layout.js"></script>
+<script>
+  Auth.requireAuth(['admin','product_lead','operator','viewer']);
+  buildLayout('analytics');
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<script>
+
+  Chart.register(ChartDataLabels);
+  let charts   = {};
+  let _period  = 'weekly';
+
+  // Cache handled by config.js (90s TTL for analytics via CACHE_RULES)
+
+  // ── Period helpers ──
+  function setPeriod(p) {
+    _period = p;
+    document.querySelectorAll('.period-tab').forEach(t =>
+      t.classList.toggle('active', t.dataset.p === p));
+    // Show shift filter only for hourly/shiftwise
+    document.getElementById('shiftFilterGroup').style.display =
+      (p === 'hourly') ? 'flex' : 'none';
+    // Auto-adjust date range based on period
+    const to  = DateState._today();
+    const map = { hourly: 0, shiftwise: 0, daily: 6, weekly: 29, monthly: 89 };
+    const from = DateState._daysAgo(map[p] || 0);
+    document.getElementById('fromDate').value = from;
+    document.getElementById('toDate').value   = to;
+    DateState.setFrom(from); DateState.setTo(to);
+    loadAll();
+  }
+
+  function getDateRange() {
+    return {
+      from: document.getElementById('fromDate').value,
+      to:   document.getElementById('toDate').value,
+      lineId:  document.getElementById('lineFilter').value,
+      shiftId: document.getElementById('shiftFilter').value,
+    };
+  }
+
+  function buildQ(extra = {}) {
+    const { from, to, lineId, shiftId } = getDateRange();
+    const p = new URLSearchParams();
+    if (from)    p.set('from_date', from);
+    if (to)      p.set('to_date', to);
+    if (lineId)  p.set('line_id', lineId);
+    if (shiftId) p.set('shift_id', shiftId);
+    p.set('period', _period);
+    Object.entries(extra).forEach(([k,v]) => v && p.set(k, v));
+    return '?' + p.toString();
+  }
+
+  // ── Main load — all panels in parallel ──
+  // Show wake-up banner if server needs time
+  async function wakeAndLoad() {
+    // Trigger a background wake ping immediately on page load
+    API._wakeServer().catch(() => {});
+    // Give it 2s then try loading — _wakeServer will block API.get if still starting
+    await new Promise(r => setTimeout(r, 1000));
+    loadAll();
+  }
+
+  async function loadAll() {
+    // Show/hide breakdown table for shift/hourly views
+    const isBreakdown = _period === 'shiftwise' || _period === 'hourly';
+    document.getElementById('breakdownCard').style.display = isBreakdown ? 'block' : 'none';
+
+    // Use allSettled so one failed chart doesn't block others
+    const results = await Promise.allSettled([
+      loadSummary(),
+      loadTrendChart(),
+      loadLineChart(),
+      loadDowntime(),
+      loadManpower(),
+      loadEfficiency(),
+      isBreakdown ? loadBreakdown() : Promise.resolve(),
+    ]);
+    const failed = results.filter(r => r.status === 'rejected');
+    if (failed.length) {
+      const msg = failed[0].reason?.message || 'server starting up';
+      if (msg.includes('waking') || msg.includes('unreachable') || msg.includes('503')) {
+        showToast('Backend is waking up — data will load shortly, please refresh.', 'error');
+      } else {
+        showToast(failed.length + ' chart(s) failed: ' + msg, 'error');
+      }
+    }
+  }
+
+  // ── KPI summary ──
+  async function loadSummary() {
+    const q = buildQ();
+    const d = await API.get('/api/analytics/summary' + q);
+    document.getElementById('mOutput').textContent = (d.total_output || 0).toLocaleString();
+    document.getElementById('mTarget').textContent = (d.total_target || 0).toLocaleString();
+    const eff = efficiency(d.total_output, d.total_target);
+    document.getElementById('mEff').textContent   = eff + '%';
+    document.getElementById('mEff').style.color   = efficiencyColor(eff);
+    document.getElementById('mDT').textContent    = (d.total_downtime_mins || 0).toLocaleString();
+    // UPMD from formula: total output / avg manpower
+    const lines = d.lines || [];
+    const totalMP = lines.reduce((a, l) => a + (l.manpower || 0), 0);
+    const upmd    = totalMP > 0 ? (d.total_output / totalMP).toFixed(1) : '—';
+    document.getElementById('mUPMD').textContent  = upmd;
+  }
+
+  // ── Trend chart — switches between hourly/daily/weekly/monthly grouping ──
+  async function loadTrendChart() {
+    const { from, to, lineId } = getDateRange();
+    const p = new URLSearchParams({ from_date: from, to_date: to });
+    if (lineId) p.set('line_id', lineId);
+
+    let data, labels, outputData, targetData;
+
+    if (_period === 'hourly' || _period === 'shiftwise') {
+      // Use hourly-trend endpoint (grouped by shift)
+      const shiftId = document.getElementById('shiftFilter').value;
+      const hp = new URLSearchParams({ entry_date: from || DateState._today() });
+      if (lineId)  hp.set('line_id', lineId);
+      if (shiftId) hp.set('shift_id', shiftId);
+      data       = await API.get('/api/analytics/hourly-trend?' + hp.toString());
+      labels     = data.map(d => d.hour);
+      outputData = data.map(d => d.output);
+      targetData = data.map(d => d.target);
+      document.getElementById('trendTitle').textContent = 'Hourly Output vs Target';
+    } else if (_period === 'monthly') {
+      // Group daily trend data by month
+      data = await API.get('/api/analytics/daily-trend?' + p.toString());
+      const monthMap = {};
+      data.forEach(d => {
+        const m = d.date.slice(0, 7); // YYYY-MM
+        if (!monthMap[m]) monthMap[m] = { output: 0, target: 0 };
+        monthMap[m].output += d.output;
+        monthMap[m].target += d.target;
+      });
+      labels     = Object.keys(monthMap).sort();
+      outputData = labels.map(m => monthMap[m].output);
+      targetData = labels.map(m => monthMap[m].target);
+      document.getElementById('trendTitle').textContent = 'Monthly Output Trend';
+    } else if (_period === 'weekly') {
+      // Group daily trend data by week
+      data = await API.get('/api/analytics/daily-trend?' + p.toString());
+      const weekMap = {};
+      data.forEach(d => {
+        const dt  = new Date(d.date);
+        const day = dt.getDay();
+        const mon = new Date(dt); mon.setDate(dt.getDate() - (day === 0 ? 6 : day - 1));
+        const wk  = mon.toISOString().split('T')[0];
+        if (!weekMap[wk]) weekMap[wk] = { output: 0, target: 0 };
+        weekMap[wk].output += d.output;
+        weekMap[wk].target += d.target;
+      });
+      labels     = Object.keys(weekMap).sort();
+      outputData = labels.map(w => weekMap[w].output);
+      targetData = labels.map(w => weekMap[w].target);
+      document.getElementById('trendTitle').textContent = 'Weekly Output Trend';
+    } else {
+      // Daily
+      data       = await API.get('/api/analytics/daily-trend?' + p.toString());
+      labels     = data.map(d => d.date);
+      outputData = data.map(d => d.output);
+      targetData = data.map(d => d.target);
+      document.getElementById('trendTitle').textContent = 'Daily Output Trend';
+    }
+
+    destroyChart('trendChart');
+    charts['trendChart'] = new Chart(document.getElementById('trendChart'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: 'Output', data: outputData, borderColor: 'var(--mahle-blue-light)', backgroundColor: 'rgba(0,119,204,0.08)', fill: true, tension: 0.3, pointRadius: 4, datalabels: { anchor:'end', align:'top', font:{size:9,weight:'700'}, color:'#005A9E', formatter: v => v > 0 ? v.toLocaleString() : '' } },
+          { label: 'Target', data: targetData, borderColor: 'var(--mahle-orange)', borderDash: [5,4], fill: false, tension: 0.3, pointRadius: 3, datalabels: { anchor:'start', align:'bottom', font:{size:9,weight:'600'}, color:'#c2410c', formatter: v => v > 0 ? v.toLocaleString() : '' } },
+        ]
+      },
+      options: chartOpts()
+    });
+  }
+
+  // ── Target vs Output per line ──
+  async function loadLineChart() {
+    const q = buildQ();
+    const d = await API.get('/api/analytics/summary' + q);
+    const lines = d.lines || [];
+    destroyChart('lineChart');
+    charts['lineChart'] = new Chart(document.getElementById('lineChart'), {
+      type: 'bar',
+      data: {
+        labels: lines.map(l => l.line_name),
+        datasets: [
+          { label: 'Output', data: lines.map(l => l.output), backgroundColor: 'rgba(0,119,204,0.75)', borderRadius: 4 },
+          { label: 'Target', data: lines.map(l => l.target), backgroundColor: 'rgba(232,119,34,0.3)', borderColor: 'var(--mahle-orange)', borderWidth: 1, borderRadius: 4 },
+        ]
+      },
+      options: chartOpts()
+    });
+  }
+
+  // ── Downtime Pareto ──
+  async function loadDowntime() {
+    const q = buildQ();
+    const data = await API.get('/api/analytics/downtime' + q);
+    destroyChart('downtimeChart');
+    if (!data.length) return;
+    const sorted = [...data].sort((a, b) => b.minutes - a.minutes);
+    const total  = sorted.reduce((s, d) => s + d.minutes, 0);
+    let running  = 0;
+    const cumPct = sorted.map(d => { running += d.minutes; return parseFloat((running/total*100).toFixed(1)); });
+
+    charts['downtimeChart'] = new Chart(document.getElementById('downtimeChart'), {
+      type: 'bar',
+      data: {
+        labels: sorted.map(d => d.reason),
+        datasets: [
+          { type: 'bar',  label: 'Downtime (min)', data: sorted.map(d => d.minutes),
+            backgroundColor: sorted.map((_,i) => ['#003E6B','#005A9E','#0077CC','#E87722','#F59D3D'][i] || '#999'),
+            borderRadius: 3, yAxisID: 'yBar', order: 2 },
+          { type: 'line', label: 'Cumulative %', data: cumPct,
+            borderColor: '#DC2626', backgroundColor: 'transparent',
+            pointBackgroundColor: '#DC2626', pointRadius: 4, borderWidth: 2,
+            tension: 0.1, yAxisID: 'yLine', order: 1 }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'top', labels: { font: { family:'Barlow', size:11 }, padding:10 } } },
+        scales: {
+          yBar:  { type:'linear', position:'left',  beginAtZero:true, grid:{ color:'rgba(0,0,0,0.04)' }, title:{ display:true, text:'Minutes', font:{size:10} } },
+          yLine: { type:'linear', position:'right', min:0, max:100, grid:{ drawOnChartArea:false }, ticks:{ callback: v => v+'%' } },
+          x: { grid:{ display:false }, ticks:{ font:{size:10}, maxRotation:30 } }
+        }
+      }
+    });
+  }
+
+  // ── Units / Person by Line ──
+  async function loadManpower() {
+    const q = buildQ();
+    const data = await API.get('/api/analytics/manpower' + q);
+    destroyChart('manpowerChart');
+    charts['manpowerChart'] = new Chart(document.getElementById('manpowerChart'), {
+      type: 'bar',
+      data: {
+        labels: data.map(d => d.line_name),
+        datasets: [{ label: 'Units/Person', data: data.map(d => d.units_per_man_day),
+          backgroundColor: 'rgba(26,155,95,0.7)', borderRadius: 4 }]
+      },
+      options: chartOpts()
+    });
+  }
+
+  // ── Efficiency table ──
+  async function loadEfficiency() {
+    const q = buildQ();
+    const data = await API.get('/api/analytics/efficiency' + q);
+    document.getElementById('effBody').innerHTML = data.length ? data.map(row => {
+      const color = efficiencyColor(row.efficiency);
+      return `<tr>
+        <td><strong>${row.line_name}</strong></td>
+        <td>${(row.total_output||0).toLocaleString()}</td>
+        <td>${(row.total_target||0).toLocaleString()}</td>
+        <td style="font-family:var(--font-condensed);font-weight:700;color:${color}">${row.efficiency}%</td>
+        <td>${row.units_per_man_day}</td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:20px">No data</td></tr>';
+  }
+
+  // ── Shift / Hour breakdown table ──
+  async function loadBreakdown() {
+    const { from, to, lineId, shiftId } = getDateRange();
+    const p = new URLSearchParams({ entry_date: from || DateState._today() });
+    if (lineId)  p.set('line_id', lineId);
+    if (shiftId) p.set('shift_id', shiftId);
+    const data = await API.get('/api/analytics/hourly-trend?' + p.toString());
+
+    const isHourly = _period === 'hourly';
+    document.getElementById('breakdownTitle').textContent = isHourly ? 'Hourly Breakdown' : 'Shift Breakdown';
+    document.getElementById('breakdownHead').innerHTML = `<tr>
+      <th>${isHourly ? 'Hour' : 'Shift'}</th>
+      <th>Target</th><th>Output</th><th>Gap</th><th>Efficiency</th>
+      <th>Plan vs Actual</th>
+    </tr>`;
+
+    if (!data.length) {
+      document.getElementById('breakdownBody').innerHTML =
+        '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted)">No data for selected date</td></tr>';
+      return;
+    }
+    document.getElementById('breakdownBody').innerHTML = data.map(row => {
+      const eff  = efficiency(row.output, row.target);
+      const gap  = row.output - row.target;
+      // Formula #8: Plan vs Actual = actual/plan
+      const pva  = row.target ? (row.output / row.target).toFixed(2) : '—';
+      const color = efficiencyColor(eff);
+      return `<tr>
+        <td>${row.hour}</td>
+        <td>${(row.target||0).toLocaleString()}</td>
+        <td>${(row.output||0).toLocaleString()}</td>
+        <td style="color:${gap<0?'var(--red)':'var(--green)'}">${gap>=0?'+':''}${gap}</td>
+        <td style="font-weight:700;color:${color}">${eff}%</td>
+        <td>${pva}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  function destroyChart(id) {
+    if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+  }
+
+  function chartOpts(showLabels = true) {
+    return {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top', labels: { font: { family: 'Barlow', size: 11 } } },
+        datalabels: showLabels ? {
+          anchor: 'end', align: 'top',
+          font: { family: 'Barlow', size: 9, weight: '600' },
+          color: '#444',
+          formatter: v => v > 0 ? v.toLocaleString() : '',
+          clamp: true,
+        } : { display: false }
+      },
+      scales: {
+        y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.04)' } },
+        x: { grid: { display: false }, ticks: { font: { size: 10 } } }
+      }
+    };
+  }
+
+  async function init() {
+    try {
+      const [lines, shifts] = await Promise.all([
+        API.get('/api/master/lines'),
+        API.get('/api/master/shifts'),
+      ]);
+      lines.forEach(l  => document.getElementById('lineFilter').add(new Option(l.name, l.id)));
+      shifts.forEach(s => document.getElementById('shiftFilter').add(new Option(`${s.name} (${s.start_time})`, s.id)));
+
+      // Bind date range to DateState
+      DateState.bindRange('fromDate', 'toDate');
+      document.getElementById('fromDate').value = DateState.getFrom();
+      document.getElementById('toDate').value   = DateState.getTo();
+
+      // Hide shift filter initially (only shown for hourly)
+      document.getElementById('shiftFilterGroup').style.display = 'none';
+
+      setPeriod('weekly');
+    } catch (e) {
+      showToast('Failed to load filters — server may be starting up, retrying…', 'error');
+      setTimeout(init, 5000);
+    }
+  }
+
+  (async () => {
+    const overlay  = document.getElementById('wakeOverlay');
+    const timerEl  = document.getElementById('wakeTimer');
+    let elapsed = 0, timerInt = null;
+    if (!API._ready) {
+      overlay.style.display = 'flex';
+      timerInt = setInterval(() => { elapsed++; if (timerEl) timerEl.textContent = elapsed + 's'; }, 1000);
+    }
+    try { await API._ensureReady(); }
+    finally { clearInterval(timerInt); overlay.style.display = 'none'; }
+    init();
+    loadAll();
+  })();
+</script>
+</body>
+</html>
