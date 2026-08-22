@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dashboard — MAHLE Production</title>
+  <link rel="stylesheet" href="assets/css/main.css"/>
+  <style>
+    .app-layout { display: flex; min-height: 100vh; }
+    .main-content { margin-left: var(--sidebar-width); flex: 1; display: flex; flex-direction: column; }
+
+    .welcome-banner {
+      background: linear-gradient(120deg, var(--mahle-blue) 0%, var(--mahle-blue-mid) 60%, var(--mahle-blue-light) 100%);
+      padding: 28px 28px 24px;
+      color: white;
+      position: relative;
+      overflow: hidden;
+    }
+    .welcome-banner::after {
+      content: '';
+      position: absolute; right: -40px; top: -40px;
+      width: 220px; height: 220px;
+      border: 40px solid rgba(232,119,34,0.15);
+      border-radius: 50%;
+    }
+    .welcome-banner::before {
+      content: '';
+      position: absolute; right: 80px; bottom: -60px;
+      width: 150px; height: 150px;
+      border: 28px solid rgba(255,255,255,0.05);
+      border-radius: 50%;
+    }
+    .welcome-text { position: relative; z-index: 1; }
+    .welcome-greeting {
+      font-family: var(--font-condensed);
+      font-size: 1.6rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .welcome-greeting span { color: var(--mahle-orange-light); }
+    .welcome-date {
+      font-size: 0.82rem;
+      color: rgba(255,255,255,0.55);
+      font-family: var(--font-mono);
+    }
+
+    .topbar { position: sticky; top: 0; z-index: 50; }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 20px;
+      margin-top: 0;
+    }
+
+    .line-status-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .line-card {
+      background: var(--bg-card);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border);
+      padding: 16px;
+      box-shadow: var(--shadow-sm);
+      transition: box-shadow var(--transition);
+    }
+    .line-card:hover { box-shadow: var(--shadow-md); }
+
+    .line-card-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .line-name {
+      font-family: var(--font-condensed);
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: var(--mahle-blue);
+    }
+
+    .line-numbers {
+      display: flex; gap: 16px; margin-bottom: 8px;
+    }
+    .line-num-block { flex: 1; }
+    .line-num-label {
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-weight: 600;
+    }
+    .line-num-val {
+      font-family: var(--font-condensed);
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      line-height: 1;
+    }
+
+    .quick-links {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .quick-link {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      text-decoration: none;
+      display: flex; align-items: center; gap: 12px;
+      transition: all var(--transition);
+      box-shadow: var(--shadow-sm);
+    }
+    .quick-link:hover {
+      border-color: var(--mahle-blue-light);
+      box-shadow: var(--shadow-md);
+      transform: translateY(-1px);
+    }
+    .quick-link-icon {
+      width: 40px; height: 40px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .quick-link-text { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
+    .quick-link-sub { font-size: 0.72rem; color: var(--text-muted); margin-top: 1px; }
+
+    .chart-container { height: 280px; position: relative; }
+  </style>
+</head>
+<body>
+<div id="wakeOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,30,60,0.88);flex-direction:column;align-items:center;justify-content:center;gap:16px">
+  <div style="width:52px;height:52px;border:4px solid rgba(255,255,255,0.15);border-top-color:#E87722;border-radius:50%;animation:spin 1s linear infinite"></div>
+  <div style="color:#fff;font-family:Barlow,sans-serif;font-size:1.1rem;font-weight:700">Server is starting up…</div>
+  <div style="color:rgba(255,255,255,0.6);font-size:0.85rem;font-family:Barlow,sans-serif;text-align:center;max-width:300px">Render free tier sleeps after inactivity.<br>Usually ready in 20–40 seconds.</div>
+  <div id="wakeTimer" style="color:#E87722;font-family:monospace;font-size:1rem;font-weight:700">0s</div>
+</div>
+<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+<div class="app-layout">
+  <div class="main-content">
+    <div class="welcome-banner">
+      <div class="welcome-text">
+        <div class="welcome-greeting">Good <span id="greeting">day</span>, <span id="userName">—</span></div>
+        <div class="welcome-date" id="currentDate">—</div>
+      </div>
+    </div>
+
+    <div class="topbar">
+      <div class="topbar-title">Production Overview</div>
+      <div class="topbar-actions">
+        <select class="form-control" id="dateFilter" style="width:160px" onchange="bustAnalyticsCache(); loadDashboard()">
+          <option value="today">Today</option>
+          <option value="week">This Week</option>
+          <option value="month">This Month</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="loadDashboard()">↻ Refresh</button>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <!-- KPI Stats -->
+      <div class="stat-grid" id="statGrid">
+        <div class="stat-card"><div class="stat-icon blue">📊</div><div class="stat-content"><div class="stat-value" id="kpiOutput">—</div><div class="stat-label">Total Output</div><div class="stat-sub" id="outputSub">units</div></div></div>
+        <div class="stat-card"><div class="stat-icon orange">🎯</div><div class="stat-content"><div class="stat-value" id="kpiTarget">—</div><div class="stat-label">Total Target</div><div class="stat-sub" id="targetSub">units</div></div></div>
+        <div class="stat-card"><div class="stat-icon green">⚡</div><div class="stat-content"><div class="stat-value" id="kpiEfficiency">—</div><div class="stat-label">Efficiency</div><div class="stat-sub" id="effTrend">vs target</div></div></div>
+        <div class="stat-card"><div class="stat-icon red">⏱</div><div class="stat-content"><div class="stat-value" id="kpiDowntime">—</div><div class="stat-label">Downtime</div><div class="stat-sub">minutes lost</div></div></div>
+      </div>
+
+      <!-- Line Status + Chart -->
+      <div class="dashboard-grid">
+        <div>
+          <!-- Production Lines -->
+          <div class="card" style="margin-bottom:20px">
+            <div class="card-header">
+              <div class="card-title" id="lineStatusTitle">Line Status — Today</div>
+            </div>
+            <div class="card-body" style="padding:16px">
+              <div class="line-status-grid" id="lineStatusGrid">
+                <div class="loading-state"><span class="spinner"></span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Hourly/period trend chart -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title" id="trendChartTitle">Output Trend</div>
+              <select class="form-control" id="trendLineFilter" style="width:130px" onchange="loadTrendChart()">
+                <option value="">All Lines</option>
+              </select>
+            </div>
+            <div class="card-body">
+              <div class="chart-container">
+                <canvas id="trendChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <!-- Quick links -->
+          <div class="quick-links" id="quickLinks"></div>
+
+          <!-- Downtime pie -->
+          <div class="card">
+            <div class="card-header"><div class="card-title">Downtime Reasons</div></div>
+            <div class="card-body">
+              <div class="chart-container" style="height:240px">
+                <canvas id="downtimeChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/js/layout.js"></script>
+<script>
+  Auth.requireAuth(['admin','product_lead','operator','viewer']);
+  buildLayout('dashboard');
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<script>
+  Chart.register(ChartDataLabels);
+
+  const user = Auth.getUser();
+  let trendChart, downtimeChart;
+
+  // Greeting
+  const hour = new Date().getHours();
+  document.getElementById('greeting').textContent = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening';
+  document.getElementById('userName').textContent = (user.name || '').split(' ')[0] || 'User';
+  document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-IN', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+
+  function buildQuickLinks() {
+    const links = [];
+    if (user.role !== 'viewer') {
+      links.push({ href:'/production/entry.html', label:'New Entry', sub:'Record production data', icon:'✏️', color:'rgba(0,119,204,0.1)' });
+    }
+    links.push({ href:'/analytics/dashboard.html', label:'Analytics', sub:'Charts & insights', icon:'📈', color:'rgba(232,119,34,0.1)' });
+    links.push({ href:'/analytics/monthly.html', label:'Monthly Report', sub:'Summary table', icon:'📋', color:'rgba(26,155,95,0.1)' });
+    if (user.role === 'admin') {
+      links.push({ href:'/master/products.html', label:'Product Master', sub:'Edit master data', icon:'🗂️', color:'rgba(217,119,6,0.1)' });
+    }
+    document.getElementById('quickLinks').innerHTML = links.map(l => `
+      <a class="quick-link" href="${l.href}">
+        <div class="quick-link-icon" style="background:${l.color}; font-size:1.2rem">${l.icon}</div>
+        <div><div class="quick-link-text">${l.label}</div><div class="quick-link-sub">${l.sub}</div></div>
+      </a>`).join('');
+  }
+  buildQuickLinks();
+
+  // ── Data label plugin options (show value on each bar/point) ──
+  function datalabelOpts(position = 'end', color = '#333') {
+    return {
+      anchor: position,
+      align: position,
+      color: color,
+      font: { family: 'Barlow', size: 10, weight: '600' },
+      formatter: v => v > 0 ? v.toLocaleString() : '',
+      clamp: true,
+    };
+  }
+
+  function getDateRange() {
+    const period   = document.getElementById('dateFilter').value;
+    const todayStr = DateState._today();
+    let from, to;
+    if (period === 'week') {
+      from = DateState._daysAgo(6); to = todayStr;
+    } else if (period === 'month') {
+      const d = new Date();
+      from = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
+      to = todayStr;
+    } else {
+      from = todayStr; to = todayStr;
+    }
+    return { period, from, to, todayStr };
+  }
+
+  async function loadDashboard() {
+    const { period, from, to } = getDateRange();
+    const periodLabels = { today: 'Today', week: 'This Week', month: 'This Month' };
+    document.getElementById('lineStatusTitle').textContent = `Line Status — ${periodLabels[period]}`;
+
+    // Always pass explicit from_date/to_date — never rely on period= param which has server-side defaults
+    try {
+      const data = await API.get(`/api/analytics/summary?from_date=${from}&to_date=${to}`);
+      document.getElementById('kpiOutput').textContent = (data.total_output || 0).toLocaleString();
+      document.getElementById('kpiTarget').textContent = (data.total_target || 0).toLocaleString();
+      const eff = efficiency(data.total_output, data.total_target);
+      document.getElementById('kpiEfficiency').textContent = eff + '%';
+      document.getElementById('kpiEfficiency').style.color = efficiencyColor(eff);
+      document.getElementById('kpiDowntime').textContent = (data.total_downtime_mins || 0).toLocaleString();
+
+      renderLineStatus(data.lines || []);
+      populateLineFilter(data.lines || []);
+    } catch (e) {
+      const isServerDown = e.message && (e.message.includes('503') || e.message.includes('unreachable') || e.message.includes('fetch'));
+      document.getElementById('lineStatusGrid').innerHTML =
+        '<div class="empty-state">' +
+        '<div class="empty-state-icon">' + (isServerDown ? '⏳' : '⚠️') + '</div>' +
+        '<div class="empty-state-title">' + (isServerDown ? 'Server starting up…' : 'Failed to load data') + '</div>' +
+        '<div class="empty-state-sub">' + (isServerDown ? 'The backend is waking up (free tier). Data will load in ~30s — click Refresh.' : e.message) + '</div>' +
+        '<button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="loadDashboard()">↻ Retry</button>' +
+        '</div>';
+      console.error('Dashboard load error:', e);
+    }
+    loadTrendChart();
+    loadDowntimeChart();
+  }
+
+  function renderLineStatus(lines) {
+    if (!lines.length) {
+      document.getElementById('lineStatusGrid').innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><div class="empty-state-title">No data for selected period</div></div>';
+      return;
+    }
+    document.getElementById('lineStatusGrid').innerHTML = lines.map(l => {
+      const eff = efficiency(l.output, l.target);
+      const color = efficiencyColor(eff);
+      // Model breakdown rows (shows each product made on that line)
+      const modelRows = (l.models || []).length > 1
+        ? `<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px">
+            ${(l.models||[]).map(m => `
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:2px 0;font-size:0.75rem">
+                <span style="color:var(--mahle-blue);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px" title="${m.model_name}">${m.model_name}</span>
+                <span style="color:var(--text-muted);font-family:var(--font-mono)">${(m.output||0).toLocaleString()}<span style="color:var(--border)"> / </span>${(m.target||0).toLocaleString()}</span>
+              </div>`).join('')}
+           </div>` : '';
+      return `
+        <div class="line-card">
+          <div class="line-card-header">
+            <div class="line-name">${l.line_name}</div>
+            <span class="badge ${parseFloat(eff)>=95?'badge-green':parseFloat(eff)>=80?'badge-amber':'badge-red'}">${eff}%</span>
+          </div>
+          <div class="line-numbers">
+            <div class="line-num-block">
+              <div class="line-num-label">Output</div>
+              <div class="line-num-val">${(l.output||0).toLocaleString()}</div>
+            </div>
+            <div class="line-num-block">
+              <div class="line-num-label">Target</div>
+              <div class="line-num-val">${(l.target||0).toLocaleString()}</div>
+            </div>
+          </div>
+          <div class="eff-bar"><div class="eff-bar-fill" style="width:${Math.min(parseFloat(eff),100)}%;background:${color}"></div></div>
+          ${modelRows}
+        </div>`;
+    }).join('');
+  }
+
+  function populateLineFilter(lines) {
+    const sel = document.getElementById('trendLineFilter');
+    const existing = [...sel.options].map(o => o.value);
+    lines.forEach(l => {
+      if (!existing.includes(l.line_id)) sel.add(new Option(l.line_name, l.line_id));
+    });
+  }
+
+  async function loadTrendChart() {
+    const { period, from, to, todayStr } = getDateRange();
+    const lineId = document.getElementById('trendLineFilter').value;
+    let labels, outputData, targetData, chartType, titleText;
+
+    if (period === 'today') {
+      // Hourly trend for today
+      const data = await API.get(`/api/analytics/hourly-trend?entry_date=${todayStr}${lineId ? '&line_id='+lineId : ''}`);
+      labels = data.map(d => d.hour);
+      outputData = data.map(d => d.output);
+      targetData = data.map(d => d.target);
+      chartType = 'bar';
+      titleText = 'Hourly Output vs Target — Today';
+    } else if (period === 'week') {
+      // Daily trend last 7 days
+      const data = await API.get(`/api/analytics/daily-trend?from_date=${from}&to_date=${todayStr}${lineId ? '&line_id='+lineId : ''}`);
+      labels = data.map(d => d.date.slice(5)); // MM-DD
+      outputData = data.map(d => d.output);
+      targetData = data.map(d => d.target);
+      chartType = 'line';
+      titleText = 'Daily Output vs Target — This Week';
+    } else {
+      // Monthly: group by week
+      const data = await API.get(`/api/analytics/daily-trend?from_date=${from}&to_date=${todayStr}${lineId ? '&line_id='+lineId : ''}`);
+      // Group by week
+      const weekMap = {};
+      data.forEach(e => {
+        const dt = new Date(e.date), day = dt.getDay();
+        const mon = new Date(dt); mon.setDate(dt.getDate() - (day === 0 ? 6 : day - 1));
+        const wk = mon.toISOString().split('T')[0];
+        if (!weekMap[wk]) weekMap[wk] = { output: 0, target: 0 };
+        weekMap[wk].output += e.output; weekMap[wk].target += e.target;
+      });
+      labels = Object.keys(weekMap).sort().map(w => 'Wk ' + w.slice(5));
+      outputData = Object.keys(weekMap).sort().map(w => weekMap[w].output);
+      targetData = Object.keys(weekMap).sort().map(w => weekMap[w].target);
+      chartType = 'line';
+      titleText = 'Weekly Output vs Target — This Month';
+    }
+
+    document.getElementById('trendChartTitle').textContent = titleText;
+    if (trendChart) trendChart.destroy();
+
+    const showDataLabels = outputData.length <= 14; // only show labels when not too crowded
+
+    if (chartType === 'bar') {
+      trendChart = new Chart(document.getElementById('trendChart'), {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Output', data: outputData, backgroundColor: 'rgba(0,119,204,0.75)', borderRadius: 4,
+              datalabels: showDataLabels ? { ...datalabelOpts('end', '#003E6B'), anchor:'end', align:'top' } : { display: false }
+            },
+            { label: 'Target', data: targetData, type: 'line', borderColor: 'var(--mahle-orange)',
+              borderWidth: 2, pointRadius: 4, fill: false, tension: 0.3,
+              datalabels: showDataLabels ? { anchor:'end', align:'top', color:'#c2410c', font:{size:9,weight:'600'}, formatter: v => v > 0 ? v.toLocaleString() : '' } : { display:false }
+            }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'top', labels: { font: { family: 'Barlow', size: 12 } } },
+            datalabels: { display: true }
+          },
+          scales: {
+            y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } },
+            x: { grid: { display: false } }
+          }
+        }
+      });
+    } else {
+      trendChart = new Chart(document.getElementById('trendChart'), {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Output', data: outputData, borderColor: 'var(--mahle-blue-light)',
+              backgroundColor: 'rgba(0,119,204,0.08)', fill: true, tension: 0.3, pointRadius: 5,
+              datalabels: showDataLabels ? { anchor:'end', align:'top', color:'var(--mahle-blue)', font:{size:10,weight:'700'}, formatter: v => v > 0 ? v.toLocaleString() : '' } : { display:false }
+            },
+            { label: 'Target', data: targetData, borderColor: 'var(--mahle-orange)',
+              borderDash: [5,4], fill: false, tension: 0.3, pointRadius: 4,
+              datalabels: showDataLabels ? { anchor:'start', align:'bottom', color:'#c2410c', font:{size:9,weight:'600'}, formatter: v => v > 0 ? v.toLocaleString() : '' } : { display:false }
+            }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'top', labels: { font: { family: 'Barlow', size: 12 } } },
+            datalabels: { display: true }
+          },
+          scales: {
+            y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } },
+            x: { grid: { display: false } }
+          }
+        }
+      });
+    }
+  }
+
+  async function loadDowntimeChart() {
+    try {
+      const { from, to } = getDateRange();
+      const data = await API.get(`/api/analytics/downtime?from_date=${from}&to_date=${to}`);
+      if (downtimeChart) downtimeChart.destroy();
+      if (!data.length) return;
+      downtimeChart = new Chart(document.getElementById('downtimeChart'), {
+        type: 'doughnut',
+        data: {
+          labels: data.map(d => d.reason),
+          datasets: [{
+            data: data.map(d => d.minutes),
+            backgroundColor: ['#003E6B','#005A9E','#0077CC','#E87722','#F59D3D','#1A9B5F','#D97706','#DC2626'],
+            borderWidth: 2, borderColor: '#fff'
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { font: { family: 'Barlow', size: 11 }, padding: 10 } },
+            datalabels: {
+              color: '#fff', font: { size: 10, weight: '700' },
+              formatter: (v, ctx) => {
+                const total = ctx.chart.data.datasets[0].data.reduce((a,b) => a+b, 0);
+                const pct = ((v / total) * 100).toFixed(1);
+                return pct >= 5 ? pct + '%' : '';
+              }
+            }
+          }
+        }
+      });
+    } catch (e) { console.error(e); }
+  }
+
+  (async () => {
+    const overlay  = document.getElementById('wakeOverlay');
+    const timerEl  = document.getElementById('wakeTimer');
+    let   elapsed  = 0;
+    let   timerInt = null;
+
+    if (!API._ready) {
+      overlay.style.display = 'flex';
+      timerInt = setInterval(() => { elapsed += 1; if (timerEl) timerEl.textContent = elapsed + 's'; }, 1000);
+    }
+
+    try { await API._ensureReady(); }
+    finally { clearInterval(timerInt); overlay.style.display = 'none'; }
+
+    loadDashboard();
+  })();
+</script>
+</body>
+</html>
