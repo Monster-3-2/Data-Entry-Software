@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Lines & Models — MAHLE</title>
+  <link rel="stylesheet" href="../assets/css/main.css"/>
+  <style>
+    .app-layout { display: flex; min-height: 100vh; }
+    .main-content { margin-left: var(--sidebar-width); flex: 1; display: flex; flex-direction: column; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    td.editable input { width: 100%; padding: 4px 8px; font-size: 0.875rem; border: 1px solid var(--mahle-blue-light); border-radius: 4px; }
+    .inline-add { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--border); }
+    .inline-add input { flex: 1; }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <div class="main-content">
+    <div class="topbar"><div class="topbar-title">Lines & Models</div></div>
+    <div class="page-content">
+      <div class="two-col">
+
+        <!-- LINES -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Production Lines</div>
+            <span id="linesCount" style="font-size:0.78rem;color:var(--text-muted)"></span>
+          </div>
+          <div class="table-wrapper" style="border:none;border-radius:0">
+            <table>
+              <thead><tr><th>#</th><th>Line Name</th><th>Active</th><th></th></tr></thead>
+              <tbody id="linesBody"><tr><td colspan="4"><div class="loading-state"><span class="spinner"></span></div></td></tr></tbody>
+            </table>
+          </div>
+          <div class="inline-add">
+            <input class="form-control" id="newLineName" placeholder="New line name (e.g. Line 7)"/>
+            <button class="btn btn-orange btn-sm" onclick="addLine()">+ Add</button>
+          </div>
+        </div>
+
+        <!-- MODELS -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Models</div>
+            <select class="form-control" id="modelLineFilter" style="width:140px" onchange="loadModels()">
+              <option value="">All Lines</option>
+            </select>
+          </div>
+          <div class="table-wrapper" style="border:none;border-radius:0">
+            <table>
+              <thead><tr><th>#</th><th>Model Name</th><th>Line</th><th>Active</th><th></th></tr></thead>
+              <tbody id="modelsBody"><tr><td colspan="5"><div class="loading-state"><span class="spinner"></span></div></td></tr></tbody>
+            </table>
+          </div>
+          <div class="inline-add">
+            <select class="form-control" id="newModelLine" style="width:130px">
+              <option value="">Line...</option>
+            </select>
+            <input class="form-control" id="newModelName" placeholder="Model name"/>
+            <button class="btn btn-orange btn-sm" onclick="addModel()">+ Add</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/config.js"></script>
+<script src="../assets/js/layout.js"></script>
+<script>
+  Auth.requireAuth(['admin']);
+  buildLayout('lines');
+
+  let allLines = [];
+
+  async function init() {
+    await loadLines();
+    await loadModels();
+  }
+
+  async function loadLines() {
+    allLines = await API.get('/api/master/lines');
+    document.getElementById('linesCount').textContent = `${allLines.length} lines`;
+
+    // Populate line selects
+    ['modelLineFilter','newModelLine'].forEach(selId => {
+      const sel = document.getElementById(selId);
+      const val = sel.value;
+      sel.innerHTML = selId === 'modelLineFilter' ? '<option value="">All Lines</option>' : '<option value="">Line...</option>';
+      allLines.forEach(l => sel.add(new Option(l.name, l.id)));
+      sel.value = val;
+    });
+
+    document.getElementById('linesBody').innerHTML = allLines.length ? allLines.map((l, i) => `
+      <tr id="line-row-${l.id}">
+        <td>${i+1}</td>
+        <td class="editable" onclick="inlineEdit(this,'lines','${l.id}','name')">${l.name}</td>
+        <td><input type="checkbox" ${l.is_active?'checked':''} onchange="toggleLine('${l.id}',this.checked)"/></td>
+        <td><button class="btn btn-danger btn-sm" onclick="deleteLine('${l.id}')">Del</button></td>
+      </tr>`).join('') :
+      '<tr><td colspan="4"><div class="empty-state"><div class="empty-state-icon">📋</div><div>No lines yet</div></div></td></tr>';
+  }
+
+  async function loadModels() {
+    const lineId = document.getElementById('modelLineFilter').value;
+    let q = lineId ? `?line_id=${lineId}` : '';
+    const models = await API.get('/api/master/models' + q);
+
+    document.getElementById('modelsBody').innerHTML = models.length ? models.map((m, i) => {
+      const line = allLines.find(l => l.id === m.line_id);
+      return `<tr id="model-row-${m.id}">
+        <td>${i+1}</td>
+        <td class="editable" onclick="inlineEdit(this,'models','${m.id}','name')">${m.name}</td>
+        <td>${line ? line.name : '—'}</td>
+        <td><input type="checkbox" ${m.is_active?'checked':''} onchange="toggleModel('${m.id}',this.checked)"/></td>
+        <td><button class="btn btn-danger btn-sm" onclick="deleteModel('${m.id}')">Del</button></td>
+      </tr>`;
+    }).join('') :
+    '<tr><td colspan="5"><div class="empty-state"><div class="empty-state-icon">📋</div><div>No models yet</div></div></td></tr>';
+  }
+
+  function inlineEdit(td, resource, id, field) {
+    if (td.querySelector('input')) return;
+    const cur = td.textContent.trim();
+    const inp = document.createElement('input');
+    inp.value = cur;
+    inp.className = 'form-control';
+    td.innerHTML = ''; td.appendChild(inp); inp.focus();
+    inp.addEventListener('blur', async () => {
+      const val = inp.value.trim() || cur;
+      td.textContent = val;
+      if (val !== cur) {
+        try {
+          await API.put(`/api/master/${resource}/${id}`, { [field]: val });
+          showToast('Updated', 'success');
+          if (resource === 'lines') loadLines();
+        } catch (e) { showToast('Failed to update', 'error'); td.textContent = cur; }
+      }
+    });
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
+  }
+
+  async function addLine() {
+    const name = document.getElementById('newLineName').value.trim();
+    if (!name) { showToast('Enter a line name', 'error'); return; }
+    try {
+      await API.post('/api/master/lines', { name });
+      document.getElementById('newLineName').value = '';
+      showToast('Line added', 'success');
+      loadLines();
+    } catch (e) { showToast(e.message, 'error'); }
+  }
+
+  async function addModel() {
+    const lineId = document.getElementById('newModelLine').value;
+    const name = document.getElementById('newModelName').value.trim();
+    if (!lineId || !name) { showToast('Select a line and enter model name', 'error'); return; }
+    try {
+      await API.post('/api/master/models', { line_id: lineId, name });
+      document.getElementById('newModelName').value = '';
+      showToast('Model added', 'success');
+      loadModels();
+    } catch (e) { showToast(e.message, 'error'); }
+  }
+
+  async function toggleLine(id, val) {
+    await API.put(`/api/master/lines/${id}`, { is_active: val });
+    showToast('Status updated', 'success');
+  }
+  async function toggleModel(id, val) {
+    await API.put(`/api/master/models/${id}`, { is_active: val });
+    showToast('Status updated', 'success');
+  }
+
+  async function deleteLine(id) {
+    showConfirm('All models under this line will also be removed.', async () => {
+      try { await API.delete(`/api/master/lines/${id}`); showToast('Line deleted', 'success'); loadLines(); loadModels(); }
+      catch (e) { showToast(e.message, 'error'); }
+    }, { title: 'Delete Line?', confirmLabel: 'Delete', type: 'danger' });
+  }
+  async function deleteModel(id) {
+    showConfirm('This model will be permanently deleted.', async () => {
+      try { await API.delete(`/api/master/models/${id}`); showToast('Model deleted', 'success'); loadModels(); }
+      catch (e) { showToast(e.message, 'error'); }
+    }, { title: 'Delete Model?', confirmLabel: 'Delete', type: 'danger' });
+  }
+
+  init();
+</script>
+</body>
+</html>
