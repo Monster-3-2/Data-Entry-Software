@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Users — MAHLE</title>
+  <link rel="stylesheet" href="../assets/css/main.css"/>
+  <style>
+    .app-layout { display: flex; min-height: 100vh; }
+    .main-content { margin-left: var(--sidebar-width); flex: 1; display: flex; flex-direction: column; }
+    .users-layout { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; align-items: start; }
+    .role-pill {
+      display: inline-block; padding: 3px 10px;
+      border-radius: 20px; font-size: 0.72rem;
+      font-weight: 700; text-transform: capitalize; letter-spacing: 0.04em;
+    }
+    .role-admin    { background: rgba(220,38,38,0.1); color: var(--red); }
+    .role-product_lead { background: rgba(0,119,204,0.1); color: var(--mahle-blue-light); }
+    .role-operator   { background: rgba(232,119,34,0.1); color: var(--mahle-orange); }
+    .role-viewer   { background: rgba(26,155,95,0.1); color: var(--green); }
+    td.editable select { width: 100%; padding: 4px 8px; font-size: 0.875rem; border: 1px solid var(--mahle-blue-light); border-radius: 4px; }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <div class="main-content">
+    <div class="topbar"><div class="topbar-title">User Management</div></div>
+    <div class="page-content">
+      <div class="users-layout">
+
+        <!-- Users Table -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">System Users</div>
+            <span id="userCount" style="font-size:0.78rem;color:var(--text-muted)"></span>
+          </div>
+          <div class="table-wrapper" style="border:none;border-radius:0">
+            <table>
+              <thead><tr><th>#</th><th>Name</th><th>Email</th><th>Role</th><th>Active</th><th></th></tr></thead>
+              <tbody id="usersBody">
+                <tr><td colspan="6"><div class="loading-state"><span class="spinner"></span></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Add User -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">Add New User</div></div>
+          <div class="card-body">
+            <div class="form-group">
+              <label class="form-label">Full Name *</label>
+              <input class="form-control" id="newName" placeholder="e.g. Rahul Mehta"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Email *</label>
+              <input type="email" class="form-control" id="newEmail" placeholder="user@mahle.com"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Password *</label>
+              <input type="password" class="form-control" id="newPassword" placeholder="Min 8 characters"/>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Role *</label>
+              <select class="form-control" id="newRole">
+                <option value="operator">Operator (data entry only)</option>
+                <option value="product_lead">Product Lead (entry + edit own)</option>
+                <option value="viewer">Viewer (read only)</option>
+                <option value="admin">Admin (full control)</option>
+              </select>
+            </div>
+            <button class="btn btn-orange" style="width:100%" onclick="addUser()">+ Create User</button>
+
+            <div style="margin-top:20px;padding:14px;background:var(--bg);border-radius:var(--radius);font-size:0.8rem;color:var(--text-muted)">
+              <strong style="color:var(--text-secondary)">Role Permissions</strong><br/>
+              <span style="color:var(--red)">●</span> <strong>Admin</strong> — Full control, all master data<br/>
+              <span style="color:var(--mahle-blue-light)">●</span> <strong>Product Lead</strong> — Enter + edit own entries today<br/>
+              <span style="color:var(--mahle-orange)">●</span> <strong>Operator</strong> — Entry only, target auto from master<br/>
+              <span style="color:var(--green)">●</span> <strong>Viewer</strong> — Analytics read-only
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/config.js"></script>
+<script src="../assets/js/layout.js"></script>
+<script>
+  Auth.requireAuth(['admin']);
+  buildLayout('users');
+
+  const currentUser = Auth.getUser();
+
+  async function loadUsers() {
+    const users = await API.get('/api/master/users');
+    document.getElementById('userCount').textContent = `${users.length} users`;
+    document.getElementById('usersBody').innerHTML = users.length ? users.map((u, i) => {
+      const isSelf = u.id === currentUser.id;
+      return `<tr id="user-${u.id}">
+        <td>${i+1}</td>
+        <td class="editable" onclick="inlineEdit(this,'${u.id}','name')">${u.name}</td>
+        <td style="color:var(--text-secondary);font-size:0.82rem">${u.email}</td>
+        <td onclick="inlineRoleEdit(this,'${u.id}','${u.role}')">
+          <span class="role-pill role-${u.role}">${u.role}</span>
+        </td>
+        <td>
+          ${isSelf
+            ? '<span style="font-size:0.75rem;color:var(--text-muted)">(you)</span>'
+            : `<input type="checkbox" ${u.is_active?'checked':''} onchange="toggleUser('${u.id}',this.checked)"/>`}
+        </td>
+        <td>
+          ${isSelf
+            ? '<span style="color:var(--text-muted);font-size:0.75rem">—</span>'
+            : `<button class="btn btn-danger btn-sm" onclick="deleteUser('${u.id}','${u.name}')">Del</button>`}
+        </td>
+      </tr>`;
+    }).join('') :
+    '<tr><td colspan="6"><div class="empty-state"><div class="empty-state-icon">👤</div><div>No users found</div></div></td></tr>';
+  }
+
+  function inlineEdit(td, id, field) {
+    if (td.querySelector('input')) return;
+    const cur = td.textContent.trim();
+    const inp = document.createElement('input');
+    inp.value = cur; inp.className = 'form-control';
+    td.innerHTML = ''; td.appendChild(inp); inp.focus();
+    inp.addEventListener('blur', async () => {
+      const val = inp.value.trim() || cur;
+      td.textContent = val;
+      if (val !== cur) {
+        try { await API.put(`/api/master/users/${id}`, { [field]: val }); showToast('Updated', 'success'); }
+        catch (e) { showToast('Failed', 'error'); td.textContent = cur; }
+      }
+    });
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); });
+  }
+
+  function inlineRoleEdit(td, id, cur) {
+    if (id === currentUser.id) return;
+    if (td.querySelector('select')) return;
+    const sel = document.createElement('select');
+    sel.className = 'form-control';
+    [
+        {v:'admin',       l:'Admin'},
+        {v:'product_lead',l:'Product Lead'},
+        {v:'operator',    l:'Operator'},
+        {v:'viewer',      l:'Viewer'},
+      ].forEach(r => sel.add(new Option(r.l, r.v)));
+    sel.value = cur;
+    td.innerHTML = ''; td.appendChild(sel); sel.focus();
+    sel.addEventListener('blur', async () => {
+      const val = sel.value;
+      await API.put(`/api/master/users/${id}`, { role: val });
+      showToast('Role updated', 'success');
+      loadUsers();
+    });
+  }
+
+  async function addUser() {
+    const name     = document.getElementById('newName').value.trim();
+    const email    = document.getElementById('newEmail').value.trim();
+    const password = document.getElementById('newPassword').value;
+    const role     = document.getElementById('newRole').value;
+
+    if (!name || !email || !password) { showToast('All fields required', 'error'); return; }
+    if (password.length < 8) { showToast('Password must be at least 8 characters', 'error'); return; }
+
+    try {
+      await API.post('/api/auth/users', { name, email, password, role });
+      ['newName','newEmail','newPassword'].forEach(id => document.getElementById(id).value = '');
+      showToast('User created successfully', 'success');
+      loadUsers();
+    } catch (e) { showToast(e.message || 'Failed to create user', 'error'); }
+  }
+
+  async function toggleUser(id, val) {
+    await API.put(`/api/master/users/${id}`, { is_active: val });
+    showToast(val ? 'User activated' : 'User deactivated', 'success');
+  }
+
+  async function deleteUser(id, name) {
+    showConfirm(`User account for <strong>${name}</strong> will be permanently removed.`, async () => {
+      try { await API.delete(`/api/master/users/${id}`); showToast('User deleted', 'success'); loadUsers(); }
+      catch (e) { showToast(e.message, 'error'); }
+    }, { title: 'Delete User?', confirmLabel: 'Delete', type: 'danger' });
+  }
+
+  loadUsers();
+</script>
+</body>
+</html>

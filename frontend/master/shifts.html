@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Shifts & Hours — MAHLE</title>
+  <link rel="stylesheet" href="../assets/css/main.css"/>
+  <style>
+    .app-layout { display: flex; min-height: 100vh; }
+    .main-content { margin-left: var(--sidebar-width); flex: 1; display: flex; flex-direction: column; }
+
+    .page-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+    td.editable input, td.editable-time input[type="time"] {
+      width: 100%; padding: 4px 8px; font-size: 0.875rem;
+      border: 1px solid var(--mahle-blue-light); border-radius: 4px; font-family: var(--font-mono);
+    }
+    .time-badge {
+      font-family: var(--font-mono); font-size: 0.82rem; background: rgba(0,62,107,0.07);
+      padding: 2px 8px; border-radius: 4px; color: var(--mahle-blue); cursor: pointer;
+      display: inline-block; border: 1px solid transparent; transition: all 0.15s;
+    }
+    .time-badge:hover { background: rgba(0,119,204,0.15); border-color: var(--mahle-blue-light); }
+    .edit-hint { font-size: 0.72rem; color: var(--text-muted); padding: 4px 16px 10px; }
+
+    .shift-group-badge {
+      font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 20px;
+      background: rgba(0,62,107,0.09); color: var(--mahle-blue);
+    }
+    .section-divider {
+      grid-column: 1/-1; border: none; border-top: 2px dashed var(--border); margin: 4px 0;
+    }
+    .sub-label {
+      font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--text-muted); padding: 12px 16px 4px;
+    }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <div class="main-content">
+    <div class="topbar"><div class="topbar-title">Shifts & Hours</div></div>
+    <div class="page-content">
+
+      <!-- ── TOP ROW: Shift Groups + Add Shift Group ── -->
+      <div class="page-cols" style="margin-bottom:20px">
+
+        <!-- Shift Groups table -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Shifts</div>
+            <span class="edit-hint" style="padding:0">e.g. Morning Shift, Night Shift</span>
+          </div>
+          <div class="edit-hint">✏ Click any cell to edit inline</div>
+          <div class="table-wrapper" style="border:none;border-radius:0">
+            <table>
+              <thead><tr><th>#</th><th>Shift Name</th><th>Start</th><th>End</th><th>Active</th><th></th></tr></thead>
+              <tbody id="shiftGroupsBody">
+                <tr><td colspan="6"><div class="loading-state"><span class="spinner"></span></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Add Shift Group -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">Add New Shift</div></div>
+          <div class="card-body">
+            <div class="form-group">
+              <label class="form-label">Shift Name *</label>
+              <input class="form-control" id="newGroupName" placeholder="e.g. Morning Shift, General Shift"/>
+            </div>
+            <div class="form-row form-row-2">
+              <div class="form-group">
+                <label class="form-label">Start Time *</label>
+                <input type="time" class="form-control" id="newGroupStart"/>
+              </div>
+              <div class="form-group">
+                <label class="form-label">End Time *</label>
+                <input type="time" class="form-control" id="newGroupEnd"/>
+              </div>
+            </div>
+            <button class="btn btn-orange" style="width:100%" onclick="addShiftGroup()">+ Add Shift</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── BOTTOM ROW: Hours + Add Hour ── -->
+      <div class="page-cols">
+
+        <!-- Hours table -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Hours</div>
+            <span class="edit-hint" style="padding:0">Sub-intervals within a shift</span>
+          </div>
+          <div class="edit-hint">✏ Click any cell to edit inline · Filter by shift below</div>
+          <div style="padding: 0 16px 10px; display:flex; align-items:center; gap:8px">
+            <label style="font-size:0.78rem;font-weight:600;color:var(--text-muted)">Filter Shift:</label>
+            <select class="form-control" id="filterGroupForHours" style="width:180px" onchange="loadHours()">
+              <option value="">All Shifts</option>
+            </select>
+            <span id="hourCount" style="font-size:0.78rem;color:var(--text-muted);margin-left:auto"></span>
+          </div>
+          <div class="table-wrapper" style="border:none;border-radius:0">
+            <table>
+              <thead><tr><th>#</th><th>Hour Name</th><th>Start</th><th>End</th><th>Shift</th><th>Active</th><th></th></tr></thead>
+              <tbody id="hoursBody">
+                <tr><td colspan="7"><div class="loading-state"><span class="spinner"></span></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Add Hour -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">Add New Hour</div></div>
+          <div class="card-body">
+            <div class="form-group">
+              <label class="form-label">Hour Name *</label>
+              <input class="form-control" id="newHourName" placeholder="e.g. Hour 1, H-07:00"/>
+            </div>
+            <div class="form-row form-row-2">
+              <div class="form-group">
+                <label class="form-label">Start Time *</label>
+                <input type="time" class="form-control" id="newHourStart"/>
+              </div>
+              <div class="form-group">
+                <label class="form-label">End Time *</label>
+                <input type="time" class="form-control" id="newHourEnd"/>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Belongs to Shift</label>
+              <select class="form-control" id="newHourGroup">
+                <option value="">— Not assigned —</option>
+              </select>
+            </div>
+            <button class="btn btn-orange" style="width:100%" onclick="addHour()">+ Add Hour</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/config.js"></script>
+<script src="../assets/js/layout.js"></script>
+<script>
+  Auth.requireAuth(['admin']);
+  buildLayout('shifts');
+
+  let shiftGroups = [];
+
+  async function init() {
+    await loadShiftGroups();
+    loadHours();
+  }
+
+  // ── SHIFT GROUPS ──────────────────────────────────────────
+  async function loadShiftGroups() {
+    shiftGroups = await API.get('/api/master/shift-groups');
+
+    // Populate group dropdowns
+    ['filterGroupForHours','newHourGroup'].forEach(selId => {
+      const sel = document.getElementById(selId);
+      const keep = sel.options[0];
+      sel.innerHTML = '';
+      sel.appendChild(keep);
+      shiftGroups.forEach(g => sel.add(new Option(g.name, g.id)));
+    });
+
+    document.getElementById('shiftGroupsBody').innerHTML = shiftGroups.length ?
+      shiftGroups.map((g, i) => `
+        <tr id="sg-${g.id}">
+          <td>${i+1}</td>
+          <td class="editable" data-id="${g.id}" data-type="group" data-field="name">${g.name}</td>
+          <td class="editable-time" data-id="${g.id}" data-type="group" data-field="start_time"><span class="time-badge">${g.start_time}</span></td>
+          <td class="editable-time" data-id="${g.id}" data-type="group" data-field="end_time"><span class="time-badge">${g.end_time}</span></td>
+          <td><input type="checkbox" ${g.is_active?'checked':''} onchange="toggleGroup('${g.id}',this.checked)"/></td>
+          <td><button class="btn btn-danger btn-sm" onclick="deleteGroup('${g.id}')">Del</button></td>
+        </tr>`).join('') :
+      '<tr><td colspan="6"><div class="empty-state"><div class="empty-state-icon">🕐</div><div>No shifts yet</div></div></td></tr>';
+
+    attachHandlers();
+  }
+
+  async function addShiftGroup() {
+    const name  = document.getElementById('newGroupName').value.trim();
+    const start = document.getElementById('newGroupStart').value;
+    const end   = document.getElementById('newGroupEnd').value;
+    if (!name || !start || !end) { showToast('All fields required', 'error'); return; }
+    try {
+      await API.post('/api/master/shift-groups', { name, start_time: start, end_time: end });
+      document.getElementById('newGroupName').value = '';
+      document.getElementById('newGroupStart').value = '';
+      document.getElementById('newGroupEnd').value   = '';
+      showToast('Shift added', 'success'); init();
+    } catch(e) { showToast(e.message, 'error'); }
+  }
+
+  async function toggleGroup(id, val) {
+    await API.put(`/api/master/shift-groups/${id}`, { is_active: val });
+    showToast('Updated', 'success');
+  }
+
+  async function deleteGroup(id) {
+    showConfirm('Hours assigned to this shift will become unassigned.', async () => {
+    try { await API.delete(`/api/master/shift-groups/${id}`); showToast('Deleted', 'success'); init(); }
+    catch(e) { showToast(e.message, 'error'); }
+  }, { title: 'Delete Shift?', confirmLabel: 'Delete', type: 'danger' });
+  }
+
+  // ── HOURS ─────────────────────────────────────────────────
+  async function loadHours() {
+    const groupId = document.getElementById('filterGroupForHours').value;
+    const url = '/api/master/shifts' + (groupId ? `?shift_group_id=${groupId}` : '');
+    const hours = await API.get(url);
+    document.getElementById('hourCount').textContent = `${hours.length} hours`;
+
+    document.getElementById('hoursBody').innerHTML = hours.length ?
+      hours.map((h, i) => {
+        const grp = h.shift_groups ? h.shift_groups.name : '—';
+        return `<tr id="hour-${h.id}">
+          <td>${i+1}</td>
+          <td class="editable" data-id="${h.id}" data-type="hour" data-field="name">${h.name}</td>
+          <td class="editable-time" data-id="${h.id}" data-type="hour" data-field="start_time"><span class="time-badge">${h.start_time}</span></td>
+          <td class="editable-time" data-id="${h.id}" data-type="hour" data-field="end_time"><span class="time-badge">${h.end_time}</span></td>
+          <td>
+            <select class="form-control" style="min-width:130px;font-size:0.8rem"
+              onchange="assignHourToGroup('${h.id}',this.value)">
+              <option value="">— None —</option>
+              ${shiftGroups.map(g => `<option value="${g.id}" ${g.id===h.shift_group_id?'selected':''}>${g.name}</option>`).join('')}
+            </select>
+          </td>
+          <td><input type="checkbox" ${h.is_active?'checked':''} onchange="toggleHour('${h.id}',this.checked)"/></td>
+          <td><button class="btn btn-danger btn-sm" onclick="deleteHour('${h.id}')">Del</button></td>
+        </tr>`;
+      }).join('') :
+      '<tr><td colspan="7"><div class="empty-state"><div class="empty-state-icon">⏰</div><div>No hours configured</div></div></td></tr>';
+
+    attachHandlers();
+  }
+
+  async function addHour() {
+    const name    = document.getElementById('newHourName').value.trim();
+    const start   = document.getElementById('newHourStart').value;
+    const end     = document.getElementById('newHourEnd').value;
+    const groupId = document.getElementById('newHourGroup').value;
+    if (!name || !start || !end) { showToast('Name, start & end required', 'error'); return; }
+    const body = { name, start_time: start, end_time: end };
+    if (groupId) body.shift_group_id = groupId;
+    try {
+      await API.post('/api/master/shifts', body);
+      document.getElementById('newHourName').value  = '';
+      document.getElementById('newHourStart').value = '';
+      document.getElementById('newHourEnd').value   = '';
+      showToast('Hour added', 'success'); loadHours();
+    } catch(e) { showToast(e.message, 'error'); }
+  }
+
+  async function assignHourToGroup(hourId, groupId) {
+    await API.put(`/api/master/shifts/${hourId}`, { shift_group_id: groupId || null });
+    showToast('Assignment updated', 'success');
+  }
+
+  async function toggleHour(id, val) {
+    await API.put(`/api/master/shifts/${id}`, { is_active: val });
+    showToast('Updated', 'success');
+  }
+
+  async function deleteHour(id) {
+    showConfirm('This hour will be permanently deleted.', async () => {
+    try { await API.delete(`/api/master/shifts/${id}`); showToast('Deleted', 'success'); loadHours(); }
+    catch(e) { showToast(e.message, 'error'); }
+  }, { title: 'Delete Hour?', confirmLabel: 'Delete', type: 'danger' });
+  }
+
+  // ── Inline editing (shared for both groups & hours) ───────
+  function attachHandlers() {
+    document.querySelectorAll('td.editable[data-type]').forEach(td => td.onclick = () => inlineEditText(td));
+    document.querySelectorAll('td.editable-time[data-type]').forEach(td => td.onclick = () => inlineEditTime(td));
+  }
+
+  function inlineEditText(td) {
+    if (td.querySelector('input')) return;
+    const { id, type, field } = td.dataset;
+    const cur = td.textContent.trim();
+    const inp = document.createElement('input'); inp.value = cur; inp.className = 'form-control';
+    td.innerHTML = ''; td.appendChild(inp); inp.focus();
+    const restore = val => { td.textContent = val; td.onclick = () => inlineEditText(td); };
+    inp.onblur = async () => {
+      const val = inp.value.trim() || cur; restore(val);
+      if (val !== cur) {
+        const url = type === 'group' ? `/api/master/shift-groups/${id}` : `/api/master/shifts/${id}`;
+        try { await API.put(url, { [field]: val }); showToast('Updated', 'success'); }
+        catch { showToast('Failed', 'error'); restore(cur); }
+      }
+    };
+    inp.onkeydown = e => { if (e.key === 'Enter') inp.blur(); if (e.key === 'Escape') restore(cur); };
+  }
+
+  function inlineEditTime(td) {
+    if (td.querySelector('input')) return;
+    const { id, type, field } = td.dataset;
+    const cur = td.querySelector('.time-badge').textContent.trim();
+    const inp = document.createElement('input'); inp.type = 'time'; inp.value = cur; inp.className = 'form-control';
+    td.innerHTML = ''; td.appendChild(inp); inp.focus();
+    const restore = val => { td.innerHTML = `<span class="time-badge">${val}</span>`; td.onclick = () => inlineEditTime(td); };
+    inp.onblur = async () => {
+      const val = inp.value || cur; restore(val);
+      if (val !== cur) {
+        const url = type === 'group' ? `/api/master/shift-groups/${id}` : `/api/master/shifts/${id}`;
+        try { await API.put(url, { [field]: val }); showToast('Time updated', 'success'); }
+        catch { showToast('Failed', 'error'); restore(cur); }
+      }
+    };
+    inp.onkeydown = e => { if (e.key === 'Enter') inp.blur(); if (e.key === 'Escape') restore(cur); };
+  }
+
+  init();
+</script>
+</body>
+</html>
